@@ -30,8 +30,8 @@ var style_label = {
   fontWeight:'bold',
   fontSize: 'large',
   textAlign: 'center',
-  backgroundColor:'#7174a5',
-  color: '#ffffff',
+  backgroundColor:'#eeeeee',
+  //color: '#ffffff',
   width:'95%',
   padding:'1px',
   height: '30px'
@@ -39,12 +39,14 @@ var style_label = {
 
 var style_exampleButton = {stretch: 'horizontal',
                       backgroundColor: '#bcbcbc',
-                      border: '1px solid black'}
+                      //border: '1px solid black'
+                      }
                       
 var style_TSbutton = {stretch: 'horizontal',
                       color:'#67000d',
                       backgroundColor: '#bcbcbc',
-                      border: '1px solid black'}
+                      border: '1px solid black'
+                      }
 
 var style_button = {stretch: 'horizontal'}
 
@@ -52,7 +54,7 @@ var style_button = {stretch: 'horizontal'}
 var panel_main = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
   style: {width: '15%', 
-          backgroundColor:'#25277a' 
+          backgroundColor:'#eeeeee' 
   }
 });
 
@@ -60,7 +62,7 @@ var panel_main = ui.Panel({
 var panel_exampleButtons = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
   style: {width: '100%', 
-          backgroundColor:'#bcbcbc' 
+          backgroundColor:'#eeeeee' 
   }
 });
 
@@ -128,7 +130,7 @@ button_plotTSoff.onClick(function(){
 var panel_TStoggle = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
   style: {width: '100%', 
-          backgroundColor:'#aaaaaa' 
+          backgroundColor:'#eeeeee' 
   }
 });
 
