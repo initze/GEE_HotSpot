@@ -8,8 +8,40 @@ var config_trend = configs.config_trend
 
 var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS')
 
-Map.setOptions('SATELLITE')
+// #############################################################################
+// ### GET URL PARAMS ###
+// #############################################################################
+var initLon = -121.68804;
+var lonUrl = ui.url.get('lon', initLon);
+ui.url.set('lon', lonUrl);
 
+var initLat = 36.46517;
+var latUrl = ui.url.get('lat', initLat);
+ui.url.set('lat', latUrl);
+
+// add zoom level
+var initZoom = 8;
+var zoomUrl = ui.url.get('zoom', initZoom);
+ui.url.set('zoom', zoomUrl);
+
+// #############################################################################
+// ### MAP CALLBACKS ###
+// #############################################################################
+
+function handleMapChange(coords) {
+  ui.url.set('lon', coords.lon);
+  ui.url.set('lat', coords.lat);
+}
+
+function handleMapZoom(zoomlevel) {
+  ui.url.set('zoom', zoomlevel);
+}
+
+Map.onChangeCenter(handleMapChange)
+Map.onChangeZoom(handleMapZoom)
+
+
+Map.setOptions('SATELLITE')
 var point = ee.Geometry.Point([0, 0])
 
 
@@ -165,10 +197,6 @@ Map.onClick(function(coords) {
   panel_timeSeries.add(plots.plot_TCX)
 
 });
-// ########################################################################################### 
-//utils_plot.plot_NDXI_timeseries
-//utils_plot.plot_TCX_timeseries
-// ########################################################################################### 
 
 // DEM visualization
 var elevationVis2 = {
@@ -191,3 +219,4 @@ Map.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', false)
 Map.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', false, 0.4)
 // Add TCVIS data
 Map.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', true)
+Map.setCenter(initLon, initLat, initZoom)
