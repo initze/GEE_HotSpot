@@ -244,6 +244,7 @@ leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', true, 0.4)
 leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', false)
 leftMap.setCenter(initLon, initLat, initZoom)
 
+
 // Create linker, necessary to link both windows
 var linker = ui.Map.Linker([leftMap, rightMap]);
 
