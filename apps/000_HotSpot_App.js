@@ -11,16 +11,16 @@ var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS'
 // #############################################################################
 // ### GET URL PARAMS ###
 // #############################################################################
-var initLon = -121.68804;
+var initLon = -153.8;
 var lonUrl = ui.url.get('lon', initLon);
 ui.url.set('lon', lonUrl);
 
-var initLat = 36.46517;
+var initLat = 70.88;
 var latUrl = ui.url.get('lat', initLat);
 ui.url.set('lat', latUrl);
 
 // add zoom level
-var initZoom = 8;
+var initZoom = 11;
 var zoomUrl = ui.url.get('zoom', initZoom);
 ui.url.set('zoom', zoomUrl);
 
