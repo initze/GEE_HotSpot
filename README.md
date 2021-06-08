@@ -4,5 +4,5 @@ Google Earthengine HotSpot Regions of Permafrost Change Production and Visualiza
 
 ### Visualization
 https://ingmarnitze.users.earthengine.app/view/hotspottcvisapp
-![grafik](https://user-images.githubusercontent.com/4864803/113686112-33675380-96c7-11eb-8b79-5a8f76b87b05.png)
+![grafik](https://user-images.githubusercontent.com/4864803/121183468-62837800-c864-11eb-8512-43567a18600b.png)
 
