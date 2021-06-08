@@ -238,6 +238,12 @@ rightMap.setCenter(initLon, initLat, initZoom)
 var leftMap = ui.Map();
 leftMap.setOptions('SATELLITE')
 
+leftMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', true)
+leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', true, 0.4)
+// Add TCVIS data
+leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', false)
+leftMap.setCenter(initLon, initLat, initZoom)
+
 // Create linker, necessary to link both windows
 var linker = ui.Map.Linker([leftMap, rightMap]);
 
@@ -252,5 +258,3 @@ var splitPanel = ui.SplitPanel({
 
 // add new swipe map
 ui.root.widgets().reset([splitPanel, panel_main]);
-
-
