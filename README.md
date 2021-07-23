@@ -1,6 +1,16 @@
 # GEE_HotSpot
 Google Earthengine HotSpot Regions of Permafrost Change Production and Visualization
 
+### Version History
+
+#### v0.3.1 [2021-07-XX]
+* fixed sharable link bug (did not work before)
+#### v0.3 [2021-06-08]
+* added swiping functionality
+#### v0.2 [2021-04-06]
+* added shareable link option
+#### v0.1
+* first github version
 
 ### Visualization
 https://ingmarnitze.users.earthengine.app/view/hotspottcvisapp
