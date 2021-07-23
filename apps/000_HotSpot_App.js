@@ -1,6 +1,6 @@
+// Create header
+
 // Imports
-var utils_LS = require('users/ingmarnitze/HotSpots:modules/utils_Landsat_SR');
-var indices = require('users/ingmarnitze/default:Modules/ms_indices');
 var utils_plot = require('users/ingmarnitze/HotSpots:modules/utils_plot');
 var configs = require('users/ingmarnitze/HotSpots:modules/configs');
 var funcs = require('users/ingmarnitze/HotSpots:modules/high_level_functions');
@@ -12,11 +12,12 @@ var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS'
 // ### GET URL PARAMS ###
 // #############################################################################
 // check if full path exists and set defaults if not
+// perhaps possible to simplify
 
 
 if (typeof ui.url.get('lon') == 'undefined')
 {
-  print(ui.url)
+  //print(ui.url)
 
   var initLon = -153.8;
   var lonUrl = ui.url.get('lon', initLon);
@@ -24,7 +25,7 @@ if (typeof ui.url.get('lon') == 'undefined')
   
   var initLat = 70.88;
   var latUrl = ui.url.get('lat', initLat);
-  print(latUrl)
+  //print(latUrl)
   ui.url.set('lat', latUrl);
   
   // add zoom level
@@ -83,20 +84,26 @@ var make_plots = function(geom){
 };
 // Create a panel with vertical flow layout.
 
+// Text Styles
 var style_label = {
   fontWeight:'bold',
   fontSize: 'large',
   textAlign: 'center',
   backgroundColor:'#eeeeee',
-  //color: '#ffffff',
   width:'95%',
   padding:'1px',
   height: '30px'
 }
 
+var style_text = {
+  textAlign: 'center',
+  backgroundColor:'#eeeeee',
+  width:'95%',
+}
+
+// Button Styles
 var style_exampleButton = {stretch: 'horizontal',
                       backgroundColor: '#bcbcbc',
-                      //border: '1px solid black'
                       }
                       
 var style_TSbutton = {stretch: 'horizontal',
@@ -104,10 +111,12 @@ var style_TSbutton = {stretch: 'horizontal',
                       backgroundColor: '#bcbcbc',
                       border: '1px solid black'
                       }
+                      
+
 
 var style_button = {stretch: 'horizontal'}
 
-// Panel for example Buttons
+// Main Panel
 var panel_main = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
   style: {width: '15%', 
@@ -150,10 +159,6 @@ panel_exampleButtons.add(button_HI)
 panel_exampleButtons.add(button_SP)
 panel_exampleButtons.add(button_BOV)
 panel_exampleButtons.add(button_BAT)
-
-// ########################################################################################### 
-
-
 
 // ########################################################################################### 
 var panel_timeSeries = ui.Panel({
@@ -205,10 +210,27 @@ panel_TStoggle_buttons.add(button_plotTSon)
 panel_TStoggle_buttons.add(button_plotTSoff)
 panel_TStoggle.add(panel_TStoggle_buttons)
 
-//panel_exampleButtons.add(panel_TStoggle)
+// Description Panel
+var panel_description = ui.Panel({
+  layout: ui.Panel.Layout.flow('vertical'),
+  style: {width: '100%', 
+          backgroundColor:'#ffffff',
+          position:'bottom-center',
+          shown:true
+  }
+});
+var label_Github = ui.Label('Github Repository', style_text)
+  .setUrl('https://github.com/initze/GEE_HotSpot');
+
+//panel_description.add(ui.Label('Additional Information', style_label))
+panel_description.add(ui.Label('Author: I.Nitze', style_text))
+panel_description.add(ui.Label('Version: 0.3.1', style_text))
+panel_description.add(label_Github)
+
 
 panel_main.add(panel_exampleButtons)
 panel_main.add(panel_TStoggle)
+panel_main.add(panel_description)
 
 ui.root.add(panel_main);
 
@@ -248,7 +270,6 @@ rightMap.setCenter(lonUrl, latUrl, zoomUrl)
 
 
 // ########################################################################################### 
-// Add swipe widget
 
 // Add left map object
 var leftMap = ui.Map();
@@ -275,8 +296,3 @@ var splitPanel = ui.SplitPanel({
 
 // add new swipe map
 ui.root.widgets().reset([splitPanel, panel_main]);
-
-if(ui.url.get('run')) {
-  var COORDS = [ui.url.get('lon'), ui.url.get('lat')];
-  Map.centerObject(ee.Geometry.Point(COORDS));
-}
