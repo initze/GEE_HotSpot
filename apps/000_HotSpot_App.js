@@ -11,18 +11,34 @@ var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS'
 // #############################################################################
 // ### GET URL PARAMS ###
 // #############################################################################
-var initLon = -153.8;
-var lonUrl = ui.url.get('lon', initLon);
-ui.url.set('lon', lonUrl);
+// check if full path exists and set defaults if not
 
-var initLat = 70.88;
-var latUrl = ui.url.get('lat', initLat);
-ui.url.set('lat', latUrl);
 
-// add zoom level
-var initZoom = 11;
-var zoomUrl = ui.url.get('zoom', initZoom);
-ui.url.set('zoom', zoomUrl);
+if (typeof ui.url.get('lon') == 'undefined')
+{
+  print(ui.url)
+
+  var initLon = -153.8;
+  var lonUrl = ui.url.get('lon', initLon);
+  ui.url.set('lon', lonUrl);
+  
+  var initLat = 70.88;
+  var latUrl = ui.url.get('lat', initLat);
+  print(latUrl)
+  ui.url.set('lat', latUrl);
+  
+  // add zoom level
+  var initZoom = 11;
+  var zoomUrl = ui.url.get('zoom', initZoom);
+  ui.url.set('zoom', zoomUrl);
+}
+else
+{
+ var lonUrl = ui.url.get('lon');
+ var latUrl = ui.url.get('lat');
+ var zoomUrl = ui.url.get('zoom');
+ 
+}
 
 // #############################################################################
 // ### MAP CALLBACKS ###
@@ -228,7 +244,7 @@ rightMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', false)
 rightMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', false, 0.4)
 // Add TCVIS data
 rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', true)
-rightMap.setCenter(initLon, initLat, initZoom)
+rightMap.setCenter(lonUrl, latUrl, zoomUrl)
 
 
 // ########################################################################################### 
@@ -242,7 +258,7 @@ leftMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', true)
 leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', true, 0.4)
 // Add TCVIS data
 leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', false)
-leftMap.setCenter(initLon, initLat, initZoom)
+leftMap.setCenter(lonUrl, latUrl, zoomUrl)
 
 
 // Create linker, necessary to link both windows
@@ -259,3 +275,8 @@ var splitPanel = ui.SplitPanel({
 
 // add new swipe map
 ui.root.widgets().reset([splitPanel, panel_main]);
+
+if(ui.url.get('run')) {
+  var COORDS = [ui.url.get('lon'), ui.url.get('lat')];
+  Map.centerObject(ee.Geometry.Point(COORDS));
+}
