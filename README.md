@@ -3,8 +3,9 @@ Google Earthengine HotSpot Regions of Permafrost Change Production and Visualiza
 
 ### Version History
 
-#### v0.3.1 [2021-07-XX]
+#### v0.3.1 [2021-07-25]
 * fixed sharable link bug (did not work before)
+* code cleanup (unnecessary code e.g. imports)
 #### v0.3 [2021-06-08]
 * added swiping functionality
 #### v0.2 [2021-04-06]
