@@ -19,9 +19,12 @@ Google Earthengine HotSpot Regions of Permafrost Change Production and Visualiza
 ### Visualization
 https://ingmarnitze.users.earthengine.app/view/hotspottcvisapp
 #### Startup Screen
-![grafik](https://user-images.githubusercontent.com/4864803/132828038-1388186e-4775-472a-84d5-e17fb38ec967.png)
+![grafik](https://user-images.githubusercontent.com/4864803/132829830-b1a6f798-8542-40d5-8780-5762d9435d38.png)
 #### Example Drew Point Coastal Erosion
-![grafik](https://user-images.githubusercontent.com/4864803/132828139-d01ccd41-8c0a-47aa-9d8e-1ffc1f90117a.png)
+![grafik](https://user-images.githubusercontent.com/4864803/132829945-febe202c-75d2-46d4-ad0c-43175fa15050.png)
 #### Example Drew Point Coastal Erosion - with time series plot
-![grafik](https://user-images.githubusercontent.com/4864803/132828436-b8038c39-1fff-442e-8218-f588d1af6fab.png)
-
+![grafik](https://user-images.githubusercontent.com/4864803/132830052-eea168af-9f0a-4b85-ba38-82793bb7e3cf.png)
+#### Example Batagaika Crater - ArcticDEM
+![grafik](https://user-images.githubusercontent.com/4864803/132830161-4b6afc31-12c8-446b-b5a9-86b04951c829.png)
+#### Example Batagaika Crater - TCVIS Layer
+![grafik](https://user-images.githubusercontent.com/4864803/132830241-9f7e7fe2-3262-4c47-ad0c-0be5621ade4a.png)
