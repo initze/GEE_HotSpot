@@ -161,7 +161,7 @@ var button_SP = ui.Button({label: 'Lake Drainage Seward Peninsula',
                            style: style_exampleButton})
 button_SP.onClick(function(){rightMap.centerObject(ee.Geometry.Point([-164, 66.5]), 11)})
 
-var button_BOV = ui.Button({label: 'Bovanenkovo Oil Fields', 
+var button_BOV = ui.Button({label: 'Bovanenkovo Gas Fields', 
                            style: style_exampleButton})
 button_BOV.onClick(function(){rightMap.centerObject(ee.Geometry.Point([68.45, 70.36]), 10)})
 
