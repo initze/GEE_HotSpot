@@ -19,17 +19,17 @@ if (typeof ui.url.get('lon') == 'undefined')
 {
   //print(ui.url)
 
-  var initLon = -153.8;
+  var initLon = 0;
   var lonUrl = ui.url.get('lon', initLon);
   ui.url.set('lon', lonUrl);
   
-  var initLat = 70.88;
+  var initLat = 50;
   var latUrl = ui.url.get('lat', initLat);
   //print(latUrl)
   ui.url.set('lat', latUrl);
   
   // add zoom level
-  var initZoom = 11;
+  var initZoom = 5;
   var zoomUrl = ui.url.get('zoom', initZoom);
   ui.url.set('zoom', zoomUrl);
 }
@@ -87,23 +87,39 @@ var make_plots = function(geom){
 // Text Styles
 var style_label = {
   fontWeight:'bold',
-  fontSize: 'large',
+  fontSize: 'medium',
   textAlign: 'center',
   backgroundColor:'#eeeeee',
   width:'95%',
   padding:'1px',
+  margin: '2px',
   height: '30px'
+}
+var style_label2 = {
+  fontWeight:'bold',
+  fontSize: 'medium',
+  textAlign: 'center',
+  backgroundColor:'#ffffff',
+  width:'95%',
+  padding:'2px',
+  height: '30px',
+  margin: '2px',
 }
 
 var style_text = {
   textAlign: 'center',
   backgroundColor:'#eeeeee',
   width:'95%',
+  padding: '1px',
+  margin: '1px',
 }
 
 // Button Styles
 var style_exampleButton = {stretch: 'horizontal',
                       backgroundColor: '#bcbcbc',
+                      color: '#555555',
+                      border: '1px solid black',
+                      margin:'2px',
                       }
                       
 var style_TSbutton = {stretch: 'horizontal',
@@ -119,7 +135,7 @@ var style_button = {stretch: 'horizontal'}
 // Main Panel
 var panel_main = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
-  style: {width: '15%', 
+  style: {width: '18%', 
           backgroundColor:'#eeeeee' 
   }
 });
@@ -153,12 +169,22 @@ var button_BAT = ui.Button({label: 'Batagaika Crater',
                            style: style_exampleButton})
 button_BAT.onClick(function(){rightMap.centerObject(ee.Geometry.Point([134.77, 67.58]), 13)})
 
-panel_exampleButtons.add(ui.Label('Examples', style_label))
+var button_ANF = ui.Button({label: 'Anaktuvuk Fire', 
+                           style: style_exampleButton})
+button_ANF.onClick(function(){rightMap.centerObject(ee.Geometry.Point([-151.01, 69.11]), 8)})
+
+
+panel_exampleButtons.add(ui.Label('Erosion permafrost', style_label2))
 panel_exampleButtons.add(button_DP)
 panel_exampleButtons.add(button_HI)
-panel_exampleButtons.add(button_SP)
-panel_exampleButtons.add(button_BOV)
 panel_exampleButtons.add(button_BAT)
+panel_exampleButtons.add(ui.Label('Lake change permafrost', style_label2))
+panel_exampleButtons.add(button_SP)
+panel_exampleButtons.add(ui.Label('Infrastructure permafrost', style_label2))
+panel_exampleButtons.add(button_BOV)
+panel_exampleButtons.add(ui.Label('Wildfire', style_label2))
+panel_exampleButtons.add(button_ANF)
+
 
 // ########################################################################################### 
 var panel_timeSeries = ui.Panel({
@@ -224,8 +250,9 @@ var label_Github = ui.Label('Github Repository', style_text)
 
 //panel_description.add(ui.Label('Additional Information', style_label))
 panel_description.add(ui.Label('Author: I.Nitze', style_text))
-panel_description.add(ui.Label('Version: 0.3.1', style_text))
+panel_description.add(ui.Label('Version: 0.3.2', style_text))
 panel_description.add(label_Github)
+panel_description.add(ui.Label('Data Period: 2000-2019', style_text))
 
 
 panel_main.add(panel_exampleButtons)
