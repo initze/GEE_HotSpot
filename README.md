@@ -2,7 +2,10 @@
 Google Earthengine HotSpot Regions of Permafrost Change Production and Visualization
 
 ### Version History
-
+#### v0.3.2 [2021-09-10]
+* adapted panel styling
+* added Anaktuvuk to examples
+* changed starting location
 #### v0.3.1 [2021-07-25]
 * fixed sharable link bug (did not work before)
 * code cleanup (unnecessary code e.g. imports)
