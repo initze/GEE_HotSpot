@@ -18,5 +18,10 @@ Google Earthengine HotSpot Regions of Permafrost Change Production and Visualiza
 
 ### Visualization
 https://ingmarnitze.users.earthengine.app/view/hotspottcvisapp
-![grafik](https://user-images.githubusercontent.com/4864803/121183468-62837800-c864-11eb-8512-43567a18600b.png)
+#### Startup Screen
+![grafik](https://user-images.githubusercontent.com/4864803/132828038-1388186e-4775-472a-84d5-e17fb38ec967.png)
+#### Example Drew Point Coastal Erosion
+![grafik](https://user-images.githubusercontent.com/4864803/132828139-d01ccd41-8c0a-47aa-9d8e-1ffc1f90117a.png)
+#### Example Drew Point Coastal Erosion - with time series plot
+![grafik](https://user-images.githubusercontent.com/4864803/132828436-b8038c39-1fff-442e-8218-f588d1af6fab.png)
 
