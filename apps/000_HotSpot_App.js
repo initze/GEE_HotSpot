@@ -89,7 +89,8 @@ var style_label = {
   fontWeight:'bold',
   fontSize: 'medium',
   textAlign: 'center',
-  backgroundColor:'#eeeeee',
+  //backgroundColor:'#eeeeee',
+  backgroundColor:'rgba(255, 255, 255, 0)',
   width:'95%',
   padding:'1px',
   margin: '2px',
@@ -99,7 +100,8 @@ var style_label2 = {
   fontWeight:'bold',
   fontSize: 'medium',
   textAlign: 'center',
-  backgroundColor:'#ffffff',
+  //backgroundColor:'#ffffff',
+  backgroundColor:'rgba(255, 255, 255, 0)',
   width:'95%',
   padding:'2px',
   height: '30px',
@@ -108,7 +110,8 @@ var style_label2 = {
 
 var style_text = {
   textAlign: 'center',
-  backgroundColor:'#eeeeee',
+  //backgroundColor:'#eeeeee',
+  backgroundColor:'rgba(255, 255, 255, 0)',
   width:'95%',
   padding: '1px',
   margin: '1px',
@@ -225,9 +228,11 @@ button_plotTSoff.onClick(function(){
 var panel_TStoggle = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
   style: {width: '100%', 
-          backgroundColor:'#eeeeee' 
+          backgroundColor:'#cccccc' 
   }
 });
+
+var label_TSviewerLink = ui.Label('Link TS Viewer', style_text) // make bold + red/green BG color test
 
 var panel_TStoggle_buttons = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal'),
@@ -241,8 +246,9 @@ var panel_TStoggle_buttons = ui.Panel({
 panel_TStoggle.add(ui.Label('Plot Time-Series', style_label))
 panel_TStoggle_buttons.add(button_plotTSon)
 panel_TStoggle_buttons.add(button_plotTSoff)
-panel_TStoggle_buttons.add(button_linkLandsatViewer)
+//panel_TStoggle_buttons.add(button_linkLandsatViewer)
 panel_TStoggle.add(panel_TStoggle_buttons)
+panel_TStoggle.add(label_TSviewerLink)
 
 // Description Panel
 var panel_description = ui.Panel({
@@ -275,15 +281,14 @@ rightMap.onClick(function(coords) {
   point = ee.Geometry.Point(coords.lon, coords.lat);
   
   var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=07-01;to=08-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
-  panel_timeSeries.add(ui.Label('Link')
-  .setUrl(url_link))
+  label_TSviewerLink.setUrl(url_link)
   // make if statement to check which buttons are activated
-  if (button_plotTSon.enabled === true){
-    rightMap.addLayer(point, {}, 'Selected Location')
-    var plots = make_plots(point)
-    panel_timeSeries.add(plots.plot_NDXI)
-    panel_timeSeries.add(plots.plot_TCX)
-  }
+  //if (button_plotTSon.enabled === true){
+  rightMap.addLayer(point, {}, 'Selected Location')
+  var plots = make_plots(point)
+  panel_timeSeries.add(plots.plot_NDXI)
+  panel_timeSeries.add(plots.plot_TCX)
+  //}
 });
 
 // DEM visualization
