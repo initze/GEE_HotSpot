@@ -214,6 +214,13 @@ button_plotTSoff.onClick(function(){
   button_plotTSon.setDisabled(false)
   button_plotTSoff.setDisabled(true)
 })
+// Get Linker Button
+var button_linkLandsatViewer = ui.Button(
+  {label: 'Select RGB Viewer', style: style_TSbutton, disabled: false})
+button_plotTSoff.onClick(function(){
+  rightMap.style().set('cursor', 'crosshair')
+})
+
 
 var panel_TStoggle = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
@@ -234,6 +241,7 @@ var panel_TStoggle_buttons = ui.Panel({
 panel_TStoggle.add(ui.Label('Plot Time-Series', style_label))
 panel_TStoggle_buttons.add(button_plotTSon)
 panel_TStoggle_buttons.add(button_plotTSoff)
+panel_TStoggle_buttons.add(button_linkLandsatViewer)
 panel_TStoggle.add(panel_TStoggle_buttons)
 
 // Description Panel
@@ -250,7 +258,7 @@ var label_Github = ui.Label('Github Repository', style_text)
 
 //panel_description.add(ui.Label('Additional Information', style_label))
 panel_description.add(ui.Label('Author: I.Nitze', style_text))
-panel_description.add(ui.Label('Version: 0.3.2', style_text))
+panel_description.add(ui.Label('Version: 0.4dev', style_text))
 panel_description.add(label_Github)
 panel_description.add(ui.Label('Data Period: 2000-2019', style_text))
 
@@ -265,11 +273,17 @@ rightMap.add(panel_timeSeries)
 rightMap.onClick(function(coords) {
   panel_timeSeries.clear()
   point = ee.Geometry.Point(coords.lon, coords.lat);
-  rightMap.addLayer(point, {}, 'Selected Location')
-  var plots = make_plots(point)
-  panel_timeSeries.add(plots.plot_NDXI)
-  panel_timeSeries.add(plots.plot_TCX)
-
+  
+  var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=07-01;to=08-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
+  panel_timeSeries.add(ui.Label('Link')
+  .setUrl(url_link))
+  // make if statement to check which buttons are activated
+  if (button_plotTSon.enabled === true){
+    rightMap.addLayer(point, {}, 'Selected Location')
+    var plots = make_plots(point)
+    panel_timeSeries.add(plots.plot_NDXI)
+    panel_timeSeries.add(plots.plot_TCX)
+  }
 });
 
 // DEM visualization
