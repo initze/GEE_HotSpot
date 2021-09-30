@@ -1,5 +1,4 @@
 import ee 
-from ee_plugin import Map 
 
 # Make time-Series plot
 def plot_NDXI_timeseries(image_collection, point):
@@ -9,9 +8,9 @@ def plot_NDXI_timeseries(image_collection, point):
       'title': "Plot time-series",
       'interpolateNulls': True,
       'series': {
-          '0': '{ pointSize': 3},
-          '1': '{ pointSize': 3},
-          '2': '{ pointSize': 3},
+          '0': {'pointSize': 3},
+          '1': {'pointSize': 3},
+          '2': {'pointSize': 3},
       },
       'hAxis': {
         'title': "Data"
@@ -30,9 +29,9 @@ def plot_TCX_timeseries(image_collection, point):
       'title': "Plot time-series",
       'interpolateNulls': True,
       'series': {
-          '0': '{ pointSize': 3, 'color': '#d73027'},
-          '1': '{ pointSize': 3, 'color': '#1a9850'},
-          '2': '{ pointSize': 3, 'color': '#3288bd'},
+          '0': {'pointSize': 3, 'color': '#d73027'},
+          '1': {'pointSize': 3, 'color': '#1a9850'},
+          '2': {'pointSize': 3, 'color': '#3288bd'},
       },
       'hAxis': {
         'title': "Data",

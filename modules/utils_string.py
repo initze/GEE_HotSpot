@@ -1,5 +1,5 @@
 import ee 
-from ee_plugin import Map 
+#from ee_plugin import Map 
 
 # Create automated eastern western hemisphere detection
 def make_TCTrendAssetNameSR(leftLon, lowLat, startyear, endyear):
@@ -31,9 +31,9 @@ def make_TCTrendAssetNameSR(leftLon, lowLat, startyear, endyear):
 
   # add leading 0 for 2-digit values for name length consistency
   if lon < 100:
-      lon = '0' + lon.toString() 
+      lon = '0' + str(lon)
   else:
-      lon = lon.toString()
+      lon = lon
 
-  assetname = 'TCTrend_SR_'+ denom_lon + lon + denom_lat + lat +'_'+startyear.toString()+'-'+endyear.toString()+'_TCVIS'
+  assetname = 'TCTrend_SR_'+ denom_lon + str(lon) + denom_lat + str(lat) +'_'+str(startyear)+'-'+str(endyear)+'_TCVIS'
   return assetname
