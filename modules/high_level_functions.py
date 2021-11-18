@@ -37,9 +37,9 @@ def runTCTrend(config):
   lower = std_diff[0]
   upper = std_diff[1]
 
-  def func_tcb(image):
+  def mask_outliers(image):
       return utils_LS.update_mask_by_std(image, lower, upper, configs.select_bands_visible)
-  collection = collection.map(func_tcb)
+  collection = collection.map(mask_outliers)
 
   # 3. Calculate image pixel count
   image_observations = collection.count().select([1], ['nObservations'])
@@ -50,7 +50,8 @@ def runTCTrend(config):
   for index in configs.select_indices:
     trend = ee.ImageCollection(collection.select(['Date', index])) \
       .reduce(ee.Reducer.linearFit().unweighted()) \
-      .select(['scale'], [index + '_slope'])
+      .select(['scale', 'offset', 'scale', 'scale'], 
+              [index + '_slope', index + '_offset', index + '_upper', index + '_lower'])
     trend_image = trend_image.addBands(trend)
 
   trend_image = trend_image.multiply(ee.Image.constant(3650))
