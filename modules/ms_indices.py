@@ -107,18 +107,28 @@ def ndvi57(image):
 #calculate NDMI
 #Landsat 8
 def ndmi8(image):
-  ndvi = image.normalizedDifference(['B5', 'B6']).rename('NDMI')
-  return image.addBands(ndvi)
+  ndmi = image.normalizedDifference(['B5', 'B6']).rename('NDMI')
+  return image.addBands(ndmi)
 
 #Landsat 5 and 7
 def ndmi57(image):
-  ndvi = image.normalizedDifference(['B4', 'B5']).rename('NDMI')
-  return image.addBands(ndvi)
+  ndmi = image.normalizedDifference(['B4', 'B5']).rename('NDMI')
+  return image.addBands(ndmi)
 
 
 def nbr(image):
   nbr = image.normalizedDifference(['B7', 'B4']).rename('NBR')
   return image.addBands(nbr)
+
+
+def ndwi8(image):
+  ndwi = image.normalizedDifference(['B3', 'B5']).rename('NDWI')
+  return image.addBands(ndwi)
+
+#Landsat 5 and 7
+def ndwi57(image):
+  ndwi = image.normalizedDifference(['B2', 'B4']).rename('NDWI')
+  return image.addBands(ndwi)
 
 
 def nbr_S2(image):
