@@ -5,9 +5,39 @@ var utils_plot = require('users/ingmarnitze/HotSpots:modules/utils_plot');
 var configs = require('users/ingmarnitze/HotSpots:modules/configs');
 var funcs = require('users/ingmarnitze/HotSpots:modules/high_level_functions');
 var config_trend = configs.config_trend
+var utils = require('users/gena/packages:utils')
+var palettes = require('users/gena/packages:palettes')
 
+//var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS')
 var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS')
+var land = ee.Image("users/gena/land_polygons_image")
+var arcticDEM = ee.Image("UMN/PGC/ArcticDEM/V3/2m_mosaic")
+var nasedem = ee.Image("NASA/NASADEM_HGT/001")
+var jrc = ee.Image("JRC/GSW1_3/GlobalSurfaceWater")
 
+// Great DEM visualization by Gennadii Donchyts
+// Copyright (c) 2018 Gennadii Donchyts. All rights reserved.
+var palette = palettes.crameri.oleron[50]
+
+var water = jrc.select('occurrence')
+               .unmask(0)
+               .resample('bicubic')
+               .divide(100)
+               .max(land.mask().not()).selfMask()
+
+var create_multilook_dem = function(elevation, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows, water, palette){
+  var dem = elevation.select('elevation')
+                .resample('bicubic')
+                //.convolve(ee.Kernel.gaussian(35, 30, 'meters'))
+  
+  var dem_rgb = dem.visualize({ min: -1000, max: 1000, palette: palette})//.blend(water)
+  
+  var rgb = utils.hillshadeRGB(dem_rgb, dem, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows)
+  var rgb2 = utils.hillshadeRGB(dem_rgb, dem, weight, exaggeration, azimuth - 90, zenith + 30, contrast, brightness, saturation, castShadows)
+  var rgb3 = utils.hillshadeRGB(dem_rgb, dem, weight, exaggeration, azimuth - 120, zenith + 25, contrast, brightness, saturation, castShadows)
+  var dem_multilook = rgb.multiply(0.6).add(rgb2.multiply(0.2)).add(rgb3.multiply(0.2))
+  return dem_multilook
+}
 // #############################################################################
 // ### GET URL PARAMS ###
 // #############################################################################
@@ -89,7 +119,8 @@ var style_label = {
   fontWeight:'bold',
   fontSize: 'medium',
   textAlign: 'center',
-  backgroundColor:'#eeeeee',
+  //backgroundColor:'#eeeeee',
+  backgroundColor:'rgba(255, 255, 255, 0)',
   width:'95%',
   padding:'1px',
   margin: '2px',
@@ -99,7 +130,8 @@ var style_label2 = {
   fontWeight:'bold',
   fontSize: 'medium',
   textAlign: 'center',
-  backgroundColor:'#ffffff',
+  //backgroundColor:'#ffffff',
+  backgroundColor:'rgba(255, 255, 255, 0)',
   width:'95%',
   padding:'2px',
   height: '30px',
@@ -108,7 +140,17 @@ var style_label2 = {
 
 var style_text = {
   textAlign: 'center',
-  backgroundColor:'#eeeeee',
+  //backgroundColor:'#eeeeee',
+  backgroundColor:'rgba(255, 255, 255, 0)',
+  width:'95%',
+  padding: '1px',
+  margin: '1px',
+}
+
+var style_link_text = {
+  textAlign: 'center',
+  //backgroundColor:'#eeeeee',
+  backgroundColor:'rgba(200, 100, 100, 1)',
   width:'95%',
   padding: '1px',
   margin: '1px',
@@ -214,13 +256,22 @@ button_plotTSoff.onClick(function(){
   button_plotTSon.setDisabled(false)
   button_plotTSoff.setDisabled(true)
 })
+// Get Linker Button
+var button_linkLandsatViewer = ui.Button(
+  {label: 'Select RGB Viewer', style: style_TSbutton, disabled: false})
+button_plotTSoff.onClick(function(){
+  rightMap.style().set('cursor', 'crosshair')
+})
+
 
 var panel_TStoggle = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
   style: {width: '100%', 
-          backgroundColor:'#eeeeee' 
+          backgroundColor:'#cccccc' 
   }
 });
+
+var label_TSviewerLink = ui.Label('Link TS Viewer', style_link_text) // make bold + red/green BG color test
 
 var panel_TStoggle_buttons = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal'),
@@ -235,6 +286,7 @@ panel_TStoggle.add(ui.Label('Plot Time-Series', style_label))
 panel_TStoggle_buttons.add(button_plotTSon)
 panel_TStoggle_buttons.add(button_plotTSoff)
 panel_TStoggle.add(panel_TStoggle_buttons)
+panel_TStoggle.add(label_TSviewerLink)
 
 // Description Panel
 var panel_description = ui.Panel({
@@ -250,10 +302,11 @@ var label_Github = ui.Label('Github Repository', style_text)
 
 //panel_description.add(ui.Label('Additional Information', style_label))
 panel_description.add(ui.Label('Author: I.Nitze', style_text))
-panel_description.add(ui.Label('Version: 0.3.2', style_text))
+panel_description.add(ui.Label('Version: 0.4dev', style_text))
 panel_description.add(label_Github)
 panel_description.add(ui.Label('Data Period: 2000-2019', style_text))
-
+panel_description.add(ui.Label('Credits', style_text))
+panel_description.add(ui.Label('DEM Viz style by G.Donchyts', style_text))
 
 panel_main.add(panel_exampleButtons)
 panel_main.add(panel_TStoggle)
@@ -265,11 +318,15 @@ rightMap.add(panel_timeSeries)
 rightMap.onClick(function(coords) {
   panel_timeSeries.clear()
   point = ee.Geometry.Point(coords.lon, coords.lat);
+  
+  var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=07-01;to=08-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
+  label_TSviewerLink.setUrl(url_link)
+  //label_TSviewerLink.set({style:{backgroundColor:'#22ddee'}})
   rightMap.addLayer(point, {}, 'Selected Location')
   var plots = make_plots(point)
   panel_timeSeries.add(plots.plot_NDXI)
   panel_timeSeries.add(plots.plot_TCX)
-
+  //}
 });
 
 // DEM visualization
@@ -284,6 +341,22 @@ var VisHs = {
   max: 200,
 };
 
+// DEM Visualization
+var weight = 0.6 // wegith of Hillshade vs RGB intensity (0 - flat, 1 - HS)
+var exaggeration = 5 // vertical exaggeration
+var azimuth = 315 // Sun azimuth
+var zenith = 40 // Sun elevation
+var brightness = 0// 0 - default
+var contrast = 0.1 // 0 - default
+var saturation = 0.3 // 1 - default
+var castShadows = true
+
+var multi_look = create_multilook_dem(arcticDEM, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows, water, palette) 
+var multi_look_nasa = create_multilook_dem(nasadem, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows, water, palette) 
+var merged = ee.ImageCollection([multi_look, multi_look_nasa]).mosaic()
+
+
+
 // ########################################################################################### 
 // Load Arctic DEM and make Hillshade
 var dem = ee.Image("UMN/PGC/ArcticDEM/V3/2m_mosaic").select('elevation');
@@ -291,22 +364,25 @@ var hillshade = ee.Terrain.hillshade(dem, 270, 45).select('hillshade');
 
 rightMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', false)
 rightMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', false, 0.4)
+rightMap.addLayer(merged.blend(water), {}, 'DEM', false)
 // Add TCVIS data
-rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', true)
-rightMap.setCenter(lonUrl, latUrl, zoomUrl)
+//rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', true)
+rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2001-2020', true)
+rightMap.setCenter(lonUrl, latUrl, zoomUrl);
 
 
 // ########################################################################################### 
 
 // Add left map object
 var leftMap = ui.Map();
-leftMap.setOptions('SATELLITE')
+leftMap.setOptions('SATELLITE');
 
-leftMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', true)
-leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', true, 0.4)
+leftMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', false);
+leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', false, 0.4);
+leftMap.addLayer(merged.blend(water), {}, 'DEM', true)
 // Add TCVIS data
-leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', false)
-leftMap.setCenter(lonUrl, latUrl, zoomUrl)
+leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2001-2020', false);
+leftMap.setCenter(lonUrl, latUrl, zoomUrl);
 
 
 // Create linker, necessary to link both windows
