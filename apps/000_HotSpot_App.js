@@ -5,9 +5,39 @@ var utils_plot = require('users/ingmarnitze/HotSpots:modules/utils_plot');
 var configs = require('users/ingmarnitze/HotSpots:modules/configs');
 var funcs = require('users/ingmarnitze/HotSpots:modules/high_level_functions');
 var config_trend = configs.config_trend
+var utils = require('users/gena/packages:utils')
+var palettes = require('users/gena/packages:palettes')
 
+//var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS')
 var TCVIS_SR = ee.ImageCollection('users/ingmarnitze/TCTrend_SR_2000-2019_TCVIS')
+var land = ee.Image("users/gena/land_polygons_image")
+var arcticDEM = ee.Image("UMN/PGC/ArcticDEM/V3/2m_mosaic")
+var nasedem = ee.Image("NASA/NASADEM_HGT/001")
+var jrc = ee.Image("JRC/GSW1_3/GlobalSurfaceWater")
 
+// Great DEM visualization by Gennadii Donchyts
+// Copyright (c) 2018 Gennadii Donchyts. All rights reserved.
+var palette = palettes.crameri.oleron[50]
+
+var water = jrc.select('occurrence')
+               .unmask(0)
+               .resample('bicubic')
+               .divide(100)
+               .max(land.mask().not()).selfMask()
+
+var create_multilook_dem = function(elevation, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows, water, palette){
+  var dem = elevation.select('elevation')
+                .resample('bicubic')
+                //.convolve(ee.Kernel.gaussian(35, 30, 'meters'))
+  
+  var dem_rgb = dem.visualize({ min: -1000, max: 1000, palette: palette})//.blend(water)
+  
+  var rgb = utils.hillshadeRGB(dem_rgb, dem, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows)
+  var rgb2 = utils.hillshadeRGB(dem_rgb, dem, weight, exaggeration, azimuth - 90, zenith + 30, contrast, brightness, saturation, castShadows)
+  var rgb3 = utils.hillshadeRGB(dem_rgb, dem, weight, exaggeration, azimuth - 120, zenith + 25, contrast, brightness, saturation, castShadows)
+  var dem_multilook = rgb.multiply(0.6).add(rgb2.multiply(0.2)).add(rgb3.multiply(0.2))
+  return dem_multilook
+}
 // #############################################################################
 // ### GET URL PARAMS ###
 // #############################################################################
@@ -75,8 +105,9 @@ var point = ee.Geometry.Point([0, 0])
 var make_plots = function(geom){
   var config_trend = configs.config_trend
   config_trend.geom = geom.buffer(10)
-  config_trend.date_filter_yr = ee.Filter.calendarRange(2000, 2019, 'year')
-  config_trend.date_filter_mth = ee.Filter.calendarRange(7, 8, 'month')
+  config_trend.date_filter_yr = ee.Filter.calendarRange(2000, 2021, 'year')
+  config_trend.date_filter_mth = ee.Filter.calendarRange(1, 12, 'month')
+  config_trend.meta_filter_cld = ee.Filter.lt('CLOUD_COVER', 10);
   var collection = funcs.makeLandsatSeriesSrFiltered(config_trend)
   var plot_NDXI = utils_plot.plot_NDXI_timeseries(collection, geom)
   var plot_TCX = utils_plot.plot_TCX_timeseries(collection, geom)
@@ -115,6 +146,18 @@ var style_text = {
   width:'95%',
   padding: '1px',
   margin: '1px',
+}
+
+var style_link_text = {
+  textAlign: 'center',
+  //backgroundColor:'#eeeeee',
+  backgroundColor:'rgba(200, 100, 100, 1)',
+  width:'95%',
+  padding: '2px',
+  margin: '2px',
+  fontWeight: 'bold',
+  color:'#000000',
+  //color:visited:'#000000',
 }
 
 // Button Styles
@@ -205,6 +248,7 @@ var button_plotTSon = ui.Button(
 button_plotTSon.onClick(function(){
   panel_timeSeries.style().set('shown', true)
   rightMap.style().set('cursor', 'crosshair')
+  leftMap.style().set('cursor', 'crosshair')
   button_plotTSon.setDisabled(true)
   button_plotTSoff.setDisabled(false)
 })                              
@@ -214,16 +258,11 @@ var button_plotTSoff = ui.Button(
 button_plotTSoff.onClick(function(){
   panel_timeSeries.style().set('shown', false)
   rightMap.style().set('cursor', 'hand')
+  leftMap.style().set('cursor', 'hand')
   button_plotTSon.setDisabled(false)
   button_plotTSoff.setDisabled(true)
 })
 // Get Linker Button
-var button_linkLandsatViewer = ui.Button(
-  {label: 'Select RGB Viewer', style: style_TSbutton, disabled: false})
-button_plotTSoff.onClick(function(){
-  rightMap.style().set('cursor', 'crosshair')
-})
-
 
 var panel_TStoggle = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
@@ -232,8 +271,7 @@ var panel_TStoggle = ui.Panel({
   }
 });
 
-var label_TSviewerLink = ui.Label('Link TS Viewer', style_text) // make bold + red/green BG color test
-
+var label_TSviewerLink = ui.Label('Link TS Viewer', style_link_text) // make bold + red/green BG color test
 var panel_TStoggle_buttons = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal'),
   style: {width: '100%', 
@@ -246,7 +284,6 @@ var panel_TStoggle_buttons = ui.Panel({
 panel_TStoggle.add(ui.Label('Plot Time-Series', style_label))
 panel_TStoggle_buttons.add(button_plotTSon)
 panel_TStoggle_buttons.add(button_plotTSoff)
-//panel_TStoggle_buttons.add(button_linkLandsatViewer)
 panel_TStoggle.add(panel_TStoggle_buttons)
 panel_TStoggle.add(label_TSviewerLink)
 
@@ -264,10 +301,11 @@ var label_Github = ui.Label('Github Repository', style_text)
 
 //panel_description.add(ui.Label('Additional Information', style_label))
 panel_description.add(ui.Label('Author: I.Nitze', style_text))
-panel_description.add(ui.Label('Version: 0.4dev', style_text))
+panel_description.add(ui.Label('Version: 0.4', style_text))
 panel_description.add(label_Github)
 panel_description.add(ui.Label('Data Period: 2000-2019', style_text))
-
+panel_description.add(ui.Label('Credits', style_text))
+panel_description.add(ui.Label('DEM Viz style by G.Donchyts', style_text))
 
 panel_main.add(panel_exampleButtons)
 panel_main.add(panel_TStoggle)
@@ -280,10 +318,9 @@ rightMap.onClick(function(coords) {
   panel_timeSeries.clear()
   point = ee.Geometry.Point(coords.lon, coords.lat);
   
-  var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=07-01;to=08-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
+  var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=01-01;to=12-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
   label_TSviewerLink.setUrl(url_link)
-  // make if statement to check which buttons are activated
-  //if (button_plotTSon.enabled === true){
+  label_TSviewerLink.set({style:{color:'#000000'}})
   rightMap.addLayer(point, {}, 'Selected Location')
   var plots = make_plots(point)
   panel_timeSeries.add(plots.plot_NDXI)
@@ -303,6 +340,22 @@ var VisHs = {
   max: 200,
 };
 
+// DEM Visualization
+var weight = 0.6 // wegith of Hillshade vs RGB intensity (0 - flat, 1 - HS)
+var exaggeration = 5 // vertical exaggeration
+var azimuth = 315 // Sun azimuth
+var zenith = 40 // Sun elevation
+var brightness = 0// 0 - default
+var contrast = 0.1 // 0 - default
+var saturation = 0.3 // 1 - default
+var castShadows = true
+
+var multi_look = create_multilook_dem(arcticDEM, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows, water, palette) 
+var multi_look_nasa = create_multilook_dem(nasadem, weight, exaggeration, azimuth, zenith, contrast, brightness, saturation, castShadows, water, palette) 
+var merged = ee.ImageCollection([multi_look, multi_look_nasa]).mosaic()
+
+
+
 // ########################################################################################### 
 // Load Arctic DEM and make Hillshade
 var dem = ee.Image("UMN/PGC/ArcticDEM/V3/2m_mosaic").select('elevation');
@@ -310,22 +363,25 @@ var hillshade = ee.Terrain.hillshade(dem, 270, 45).select('hillshade');
 
 rightMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', false)
 rightMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', false, 0.4)
+rightMap.addLayer(merged.blend(water), {}, 'DEM', false)
 // Add TCVIS data
-rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', true)
-rightMap.setCenter(lonUrl, latUrl, zoomUrl)
+//rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', true)
+rightMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2001-2020', true)
+rightMap.setCenter(lonUrl, latUrl, zoomUrl);
 
 
 // ########################################################################################### 
 
 // Add left map object
 var leftMap = ui.Map();
-leftMap.setOptions('SATELLITE')
+leftMap.setOptions('SATELLITE');
 
-leftMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', true)
-leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', true, 0.4)
+leftMap.addLayer(dem, elevationVis2, 'Arctic DEM Elevation', false);
+leftMap.addLayer(hillshade, VisHs, 'Arctic DEM Hillshade', false, 0.4);
+leftMap.addLayer(merged.blend(water), {}, 'DEM', true)
 // Add TCVIS data
-leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2000-2019', false)
-leftMap.setCenter(lonUrl, latUrl, zoomUrl)
+leftMap.addLayer(TCVIS_SR, {}, 'HotSpot TCVIS Landsat Trends (SR) 2001-2020', false);
+leftMap.setCenter(lonUrl, latUrl, zoomUrl);
 
 
 // Create linker, necessary to link both windows
