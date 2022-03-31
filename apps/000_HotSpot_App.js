@@ -105,8 +105,9 @@ var point = ee.Geometry.Point([0, 0])
 var make_plots = function(geom){
   var config_trend = configs.config_trend
   config_trend.geom = geom.buffer(10)
-  config_trend.date_filter_yr = ee.Filter.calendarRange(2000, 2019, 'year')
-  config_trend.date_filter_mth = ee.Filter.calendarRange(7, 8, 'month')
+  config_trend.date_filter_yr = ee.Filter.calendarRange(2000, 2021, 'year')
+  config_trend.date_filter_mth = ee.Filter.calendarRange(1, 12, 'month')
+  config_trend.meta_filter_cld = ee.Filter.lt('CLOUD_COVER', 10);
   var collection = funcs.makeLandsatSeriesSrFiltered(config_trend)
   var plot_NDXI = utils_plot.plot_NDXI_timeseries(collection, geom)
   var plot_TCX = utils_plot.plot_TCX_timeseries(collection, geom)
@@ -152,8 +153,11 @@ var style_link_text = {
   //backgroundColor:'#eeeeee',
   backgroundColor:'rgba(200, 100, 100, 1)',
   width:'95%',
-  padding: '1px',
-  margin: '1px',
+  padding: '2px',
+  margin: '2px',
+  fontWeight: 'bold',
+  color:'#000000',
+  //color:visited:'#000000',
 }
 
 // Button Styles
@@ -244,6 +248,7 @@ var button_plotTSon = ui.Button(
 button_plotTSon.onClick(function(){
   panel_timeSeries.style().set('shown', true)
   rightMap.style().set('cursor', 'crosshair')
+  leftMap.style().set('cursor', 'crosshair')
   button_plotTSon.setDisabled(true)
   button_plotTSoff.setDisabled(false)
 })                              
@@ -253,16 +258,11 @@ var button_plotTSoff = ui.Button(
 button_plotTSoff.onClick(function(){
   panel_timeSeries.style().set('shown', false)
   rightMap.style().set('cursor', 'hand')
+  leftMap.style().set('cursor', 'hand')
   button_plotTSon.setDisabled(false)
   button_plotTSoff.setDisabled(true)
 })
 // Get Linker Button
-var button_linkLandsatViewer = ui.Button(
-  {label: 'Select RGB Viewer', style: style_TSbutton, disabled: false})
-button_plotTSoff.onClick(function(){
-  rightMap.style().set('cursor', 'crosshair')
-})
-
 
 var panel_TStoggle = ui.Panel({
   layout: ui.Panel.Layout.flow('vertical'),
@@ -272,7 +272,6 @@ var panel_TStoggle = ui.Panel({
 });
 
 var label_TSviewerLink = ui.Label('Link TS Viewer', style_link_text) // make bold + red/green BG color test
-
 var panel_TStoggle_buttons = ui.Panel({
   layout: ui.Panel.Layout.flow('horizontal'),
   style: {width: '100%', 
@@ -302,7 +301,7 @@ var label_Github = ui.Label('Github Repository', style_text)
 
 //panel_description.add(ui.Label('Additional Information', style_label))
 panel_description.add(ui.Label('Author: I.Nitze', style_text))
-panel_description.add(ui.Label('Version: 0.4dev', style_text))
+panel_description.add(ui.Label('Version: 0.4', style_text))
 panel_description.add(label_Github)
 panel_description.add(ui.Label('Data Period: 2000-2019', style_text))
 panel_description.add(ui.Label('Credits', style_text))
@@ -319,9 +318,9 @@ rightMap.onClick(function(coords) {
   panel_timeSeries.clear()
   point = ee.Geometry.Point(coords.lon, coords.lat);
   
-  var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=07-01;to=08-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
+  var url_link = 'https://ingmarnitze.users.earthengine.app/view/landsat-timeseries-explorer-initze#run=true;lon='+coords.lon+';lat='+coords.lat+';from=01-01;to=12-31;index=TCB;rgb=SWIR1%2FNIR%2FGREEN;chipwidth=2'
   label_TSviewerLink.setUrl(url_link)
-  //label_TSviewerLink.set({style:{backgroundColor:'#22ddee'}})
+  label_TSviewerLink.set({style:{color:'#000000'}})
   rightMap.addLayer(point, {}, 'Selected Location')
   var plots = make_plots(point)
   panel_timeSeries.add(plots.plot_NDXI)

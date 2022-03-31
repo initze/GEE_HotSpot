@@ -2,6 +2,10 @@
 Google Earthengine HotSpot Regions of Permafrost Change Production and Visualization
 
 ### Version History
+#### v0.4 [2022-03-09]
+* TCVIS (almost global coverage)
+* added global DEM coverage with nice visualization (by G.Donchyts)
+* link to J.Braaten's annual Landsat mosaic tool
 #### v0.3.2 [2021-09-10]
 * adapted panel styling
 * added Anaktuvuk to examples
