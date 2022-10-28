@@ -1,6 +1,7 @@
 import ee 
 
 # Make time-Series plot
+"""
 def plot_NDXI_timeseries(image_collection, point):
   chart_NDXI = ui.Chart.image.series(image_collection.select(['NDVI', 'NDMI']), point, {}, {}) \
     .setChartType('ScatterChart') \
@@ -41,3 +42,4 @@ def plot_TCX_timeseries(image_collection, point):
       }
     })
   return chart_TC
+"""
