@@ -4,5 +4,3 @@ from geehotspot import utils_Landsat_SR
 from geehotspot import ms_indices
 from geehotspot import high_level_functions
 from geehotspot import utils_string
-import ee
-ee.Initialize()

@@ -1,4 +1,5 @@
 import ee 
+ee.Initialize()
 
 date_filter_yr = ee.Filter.calendarRange(2000, 2019, 'year')
 date_filter_mth = ee.Filter.calendarRange(7, 8, 'month')

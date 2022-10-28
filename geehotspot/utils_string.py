@@ -1,6 +1,3 @@
-import ee 
-#from ee_plugin import Map 
-
 # Create automated eastern western hemisphere detection
 def make_TCTrendAssetNameSR(leftLon, lowLat, startyear, endyear):
   denom_lon = ''

@@ -1,4 +1,5 @@
 import ee 
+ee.Initialize()
 
 
 from . import configs
