@@ -25,6 +25,12 @@ def makeLandsatSeriesSrFiltered(config):
     
     return collection
 
+def add_external_mask(external_mask):
+    def wrap(image):
+        image_mask = image.mask()
+        combined_mask = image_mask.And(external_mask)
+        return image.updateMask(combined_mask)
+    return wrap
 
 def runTCTrend(config_trend):
   # 1. load Landsat data and calculate indices
@@ -36,6 +42,12 @@ def runTCTrend(config_trend):
   .map(indices.ndmi57) \
   .map(indices.ndwi57) \
   .map(indices.tc5)
+
+  if 'mask' in config_trend.keys():
+      if isinstance(config_trend['mask'], ee.Image):
+        collection = collection.map(add_external_mask(config_trend['mask']))
+      else:
+          print('Mask Layer is not an ee.Image instance')
 
   # 2. Filter pixels off 3 std from mean
   std_diff = utils_LS.calculate_std_diff(collection, 3)
