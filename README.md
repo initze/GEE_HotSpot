@@ -2,6 +2,10 @@
 Google Earthengine HotSpot Regions of Permafrost Change Production and Visualization
 
 ### Version History
+#### v0.6 [2022-10-28]
+* converted python code to package
+#### v0.5 [2022-10-28]
+* added masking (e.g. only water areas) in trend calculation
 #### v0.4 [2022-03-09]
 * TCVIS (almost global coverage)
 * added global DEM coverage with nice visualization (by G.Donchyts)
