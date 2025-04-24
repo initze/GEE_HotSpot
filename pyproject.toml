@@ -1,0 +1,15 @@
+[project]
+name = "gee-hotspot"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "earthengine-api>=1.5.12",
+    "eemont>=0.3.6",
+    "geemap>=0.35.3",
+    "ipykernel>=6.29.5",
+    "ipywidgets>=8.1.6",
+    "jupyterlab>=4.4.1",
+    "leafmap>=0.43.6",
+]
