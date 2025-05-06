@@ -7,29 +7,36 @@ Created on Wed Sep 29 13:57:56 2021
 
 import ee
 
+#def scale_offset(image: ee.image) -> ee.Image:
+#  """
+#  apply scale and offset and calculate reflectances from 0 to 1 range
+#  """
+#  opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+#  return image.addBands(opticalBands, names=None, overwrite=True)
+
 
 def harmonizationRoy(oli):
   slopes = ee.Image.constant([0.9785, 0.9542, 0.9825, 1.0073, 1.0171, 0.9949]);        # RMA - create an image of slopes per band for L8 TO L7 regression line - David Roy
   itcp = ee.Image.constant([-0.0095, -0.0016, -0.0022, -0.0021, -0.0030, 0.0029]);     # RMA - create an image of y-intercepts per band for L8 TO L7 regression line - David Roy
-  y = oli.select(['B2','B3','B4','B5','B6','B7'],['B1', 'B2', 'B3', 'B4', 'B5', 'B7']) \
+  y = oli.select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7'],['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7']) \
   .resample('bicubic') \
   .subtract(itcp.multiply(10000)).divide(slopes) \
   .set('system:time_start', oli.get('system:time_start'))                      
-  return y.toShort().addBands(oli.select(['pixel_qa']))
+  return y.toShort().addBands(oli.select(['QA_PIXEL']))
 
 def maskLsSr(image):
-  # Bits 3 and 5 are cloud shadow and cloud, respectively.
-  cloudShadowBitMask = (1 << 3)
-  snowBitMask = (1 << 4)
-  cloudsBitMask = (1 << 5)
-  terrainBitMask = (1 << 10)
+  """
+  Create Cloud, Cloud Shadow and Snow/Ice Mask (no terrain shadow mask)
+  """
+  cloudShadowBitMask = (1 << 4)
+  snowBitMask = (1 << 5)
+  cloudsBitMask = (1 << 3)
   # Get the pixel QA band.
-  qa = image.select('pixel_qa')
+  qa = image.select('QA_PIXEL')
   # Both flags should be set to zero, indicating clear conditions.
   mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0) \
                  .And(qa.bitwiseAnd(snowBitMask).eq(0)) \
-                 .And(qa.bitwiseAnd(cloudsBitMask).eq(0)) \
-                 .And(qa.bitwiseAnd(terrainBitMask).eq(0))
+                 .And(qa.bitwiseAnd(cloudsBitMask).eq(0))
   return image.updateMask(mask)
 
 # -------------- TESTING REQUIRED --------------
@@ -117,10 +124,11 @@ def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_m
   .filter(date_filter_yr)\
   .filter(date_filter_mth)\
   .filter(meta_filter_cld)\
+  .map(scale_offset)\
   .map(harmonizationRoy)\
   .map(maskLsSr)\
   .map(make_dateband)\
-  .select('B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'pixel_qa', 'Date')
+  .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
   return collection
 
 
@@ -130,16 +138,17 @@ def preprocessed_L57_collection(dataset_name, bbox, date_filter_yr, date_filter_
   .filter(date_filter_yr)\
   .filter(date_filter_mth)\
   .filter(meta_filter_cld)\
+  .map(scale_offset)\
   .map(maskLsSr)\
   .map(make_dateband)\
-  .select('B1', 'B2', 'B3', 'B4', 'B5', 'B7', 'pixel_qa', 'Date')
+  .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
   return collection
 
 
 def makeLandsatSeriesSr(bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
-  l5 = preprocessed_L57_collection('LANDSAT/LT05/C01/T1_SR', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
-  l7 = preprocessed_L57_collection('LANDSAT/LE07/C01/T1_SR', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
-  l8 = preprocessed_L8_collection('LANDSAT/LC08/C01/T1_SR', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
+  l5 = preprocessed_L57_collection('LANDSAT/LT05/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
+  l7 = preprocessed_L57_collection('LANDSAT/LE07/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
+  l8 = preprocessed_L8_collection('LANDSAT/LC08/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
   return l5.merge(l7).merge(l8)
 
 
