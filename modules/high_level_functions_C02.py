@@ -56,7 +56,9 @@ def runTCTrend(config_trend):
   print(config_trend['select_bands_visible'])
   def mask_outliers(image):
       return utils_LS.update_mask_by_std(image, lower, upper, config_trend['select_bands_visible'])
-  collection = collection.map(mask_outliers)
+  
+  # TODO: This part here breaks the Collection
+  # collection = collection.map(mask_outliers)
 
   # 3. Calculate image pixel count
   image_observations = collection.count().select([1], ['nObservations'])
@@ -70,26 +72,20 @@ def runTCTrend(config_trend):
       .reduce(ee.Reducer.linearFit().unweighted()) \
       .select(['scale', 'offset', 'scale', 'scale'], 
               [index + '_slope', index + '_offset', index + '_upper', index + '_lower'])
-    trend_image = trend_image.addBands(trend)
+    trend_image = trend_image.addBands(trend).clip(config_trend['geom'])
 
   trend_image = trend_image.multiply(ee.Image.constant(3650))
 
-  # 5. Calculate basic collection statistics
-  #
-  
-  # 6. Create visual output #.unitScale(-1200, 1200)\
-  #trend_image = trend_image
+  # 6. Create visual output 
   trend_image_visual = trend_image.select(config_trend['select_TCtrend_bands']) \
-                                  .unitScale(-18, 30)\
+                                  .unitScale(-0.12, 0.12)\
                                   .multiply(ee.Image.constant(255)).uint8() # Scale to values from -0.12 to 0.12 \
      
-
   return {'visual': trend_image_visual,
           'data': trend_image,
           'image_collection': collection,
           'n_observations': image_observations.uint16()
   }
-
 
 
 def exportTCTrendImage(config):
