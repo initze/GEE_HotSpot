@@ -79,6 +79,8 @@ def runTCTrend(config_trend):
   print(config_trend['select_bands_visible'])
   def mask_outliers(image):
       return utils_LS.update_mask_by_std(image, lower, upper, config_trend['select_bands_visible'])
+
+  # TODO: calculate annaul mosaic here
   
   # TODO: This part here breaks the Collection
   # collection = collection.map(mask_outliers)
@@ -91,12 +93,14 @@ def runTCTrend(config_trend):
   trend_image = ee.Image()
   print(config_trend['select_indices'])
   for index in config_trend['select_indices']:
+    # TODO: change 'Date' to 'Year'
     trend = ee.ImageCollection(collection.select(['Date', index])) \
       .reduce(ee.Reducer.linearFit().unweighted()) \
       .select(['scale', 'offset', 'scale', 'scale'], 
               [index + '_slope', index + '_offset', index + '_upper', index + '_lower'])
     trend_image = trend_image.addBands(trend).clip(config_trend['geom'])
 
+  # TODO: change factor to 10
   trend_image = trend_image.multiply(ee.Image.constant(3650))
 
   # 6. Create visual output 
