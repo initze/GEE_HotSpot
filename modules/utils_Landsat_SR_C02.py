@@ -17,13 +17,19 @@ def scale_offset(image: ee.image) -> ee.Image:
 
 
 def harmonizationRoy(oli):
-  slopes = ee.Image.constant([0.9785, 0.9542, 0.9825, 1.0073, 1.0171, 0.9949]);        # RMA - create an image of slopes per band for L8 TO L7 regression line - David Roy
-  itcp = ee.Image.constant([-0.0095, -0.0016, -0.0022, -0.0021, -0.0030, 0.0029]);     # RMA - create an image of y-intercepts per band for L8 TO L7 regression line - David Roy
-  y = oli.select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7'],['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7']) \
-  .resample('bicubic') \
-  .subtract(itcp.multiply(10000)).divide(slopes) \
-  .set('system:time_start', oli.get('system:time_start'))                      
-  return y.toShort().addBands(oli.select(['QA_PIXEL']))
+    slopes = ee.Image.constant([0.9785, 0.9542, 0.9825, 1.0073, 1.0171, 0.9949])
+    itcp = ee.Image.constant([-0.0095, -0.0016, -0.0022, -0.0021, -0.0030, 0.0029])
+    y = oli.select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7'],
+                   ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7']) \
+           .resample('bicubic') \
+           .subtract(itcp).divide(slopes) \
+           .set('system:time_start', oli.get('system:time_start'))
+    y = y.set('image_id', oli.id())  # Add image ID here
+    y = y.addBands(oli.select(['QA_PIXEL']))
+    y = y.copyProperties(oli, oli.propertyNames())
+    # return y.toShort().addBands(oli.select(['QA_PIXEL']))
+    return y
+
 
 def maskLsSr(image):
   """
@@ -119,6 +125,12 @@ def make_dateband(image):
   #TODO: rename to 'Date'
   return image.addBands(date_image)
 
+# Applies scaling factors.
+def scale_offset(image):
+  optical_bands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+  return image.addBands(optical_bands, None, True)
+
+
 def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
   collection = ee.ImageCollection(dataset_name)\
   .filterBounds(bbox)\
@@ -126,8 +138,8 @@ def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_m
   .filter(date_filter_mth)\
   .filter(meta_filter_cld)\
   .map(scale_offset)\
-  .map(harmonizationRoy)\
   .map(maskLsSr)\
+  .map(harmonizationRoy)\
   .map(make_dateband)\
   .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
   return collection
