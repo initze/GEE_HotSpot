@@ -6,13 +6,14 @@ Created on Wed Sep 29 13:57:56 2021
 """
 
 import ee
+from . import ms_indices_C02 as indices
 
-#def scale_offset(image: ee.image) -> ee.Image:
-#  """
-#  apply scale and offset and calculate reflectances from 0 to 1 range
-#  """
-#  opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
-#  return image.addBands(opticalBands, names=None, overwrite=True)
+def scale_offset(image: ee.image) -> ee.Image:
+  """
+  apply scale and offset and calculate reflectances from 0 to 1 range
+  """
+  opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+  return image.addBands(opticalBands, names=None, overwrite=True)
 
 
 def harmonizationRoy(oli):
@@ -160,7 +161,7 @@ def preprocessed_L57_collection(dataset_name, bbox, date_filter_yr, date_filter_
 def makeLandsatSeriesSr(bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
   l5 = preprocessed_L57_collection('LANDSAT/LT05/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
   l7 = preprocessed_L57_collection('LANDSAT/LE07/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
-  l8 = preprocessed_L8_collection('LANDSAT/LC08/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
+  l8 = preprocessed_L8_collection('LANDSAT/LC08/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld) 
   return l5.merge(l7).merge(l8)
 
 
