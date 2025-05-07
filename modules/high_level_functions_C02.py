@@ -5,6 +5,14 @@ from . import utils_string
 from . import ms_indices_C02 as indices
 from . import utils_Landsat_SR_C02 as utils_LS
 
+#Sinas Versuch: TC57 und TC8 einzeln
+# unten: 
+  # 2. Aufteilen in L8 und L5/7, dann TC separat berechnen
+  #collection_l8 = collection.filter(ee.Filter.eq('SPACECRAFT_ID', 'LANDSAT_8')).map(indices.tc8)
+  #collection_l57 = collection.filter(ee.Filter.neq('SPACECRAFT_ID', 'LANDSAT_8')).map(indices.tc)
+
+  # 3. Mergen zu einer gemeinsamen Kollektion
+  #collection = collection_l8.merge(collection_l57)
 
 def makeLandsatSeriesSrFiltered(config):
     # 1. load Landsat data and calculate indices
@@ -12,7 +20,7 @@ def makeLandsatSeriesSrFiltered(config):
     .map(indices.ndvi) \
     .map(indices.ndmi) \
     .map(indices.ndwi) \
-    .map(indices.tc)
+    .map(indices.tc) 
 
     # 2. Filter pixels off 3 std from mean
     std_diff = utils_LS.calculate_std_diff(collection, 3)
@@ -31,6 +39,20 @@ def add_external_mask(external_mask):
         return image.updateMask(combined_mask)
     return wrap
 
+# Sinas Versuch: L7 SCL off
+#def mask_l7_scl_off(image):
+#    sensor = ee.String(image.get('SPACECRAFT_ID'))  
+#
+#    # Maskierung nur bei Landsat 7
+#    return ee.Image(
+#        ee.Algorithms.If(
+#            sensor.equals('LANDSAT_7'),
+#            image.updateMask(scl_mask),
+#            image
+#        )
+#    )
+
+
 def runTCTrend(config_trend):
   # 1. load Landsat data and calculate indices
   collection = utils_LS.makeLandsatSeriesSr(config_trend['geom'], 
@@ -41,6 +63,7 @@ def runTCTrend(config_trend):
   .map(indices.ndmi) \
   .map(indices.ndwi) \
   .map(indices.tc)
+ # .map(mask_l7_scl_off) \
 
   if 'mask' in config_trend.keys():
       if isinstance(config_trend['mask'], ee.Image):
@@ -73,16 +96,13 @@ def runTCTrend(config_trend):
     trend_image = trend_image.addBands(trend)
 
   trend_image = trend_image.multiply(ee.Image.constant(3650))
-
-  # 5. Calculate basic collection statistics
-  #
   
-  # 6. Create visual output #.unitScale(-1200, 1200)\
-  #trend_image = trend_image
+  # 6. Create visual output #.unitScale(-1200, 1200)\ # Scale to values from -0.12 to 0.12 
   trend_image_visual = trend_image.select(config_trend['select_TCtrend_bands']) \
-                                  .unitScale(-18, 30)\
-                                  .multiply(ee.Image.constant(255)).uint8() # Scale to values from -0.12 to 0.12 \
-     
+                                  .unitScale(28000, 50000)\
+                                  .multiply(ee.Image.constant(255)).uint8() 
+                                  #UnitScale gerade angepasst auf Percentile von TCW
+                                  #Percentile(min/max): TCG:  185359, 308198     TCW: 28545, 48508     TCG: -62078, -37760
 
   return {'visual': trend_image_visual,
           'data': trend_image,

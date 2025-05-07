@@ -20,21 +20,21 @@ def tc(image):
     Calculate Tasseled Cap
     """
     tcb = image.expression(
-    '(0.2043*a + 0.4158 * b + 0.5524 * c + 0.5741 * d + 0.3124 * e + 0.2303 * f) * 0.0001',
+    '(0.2043*a + 0.4158 * b + 0.5524 * c + 0.5741 * d + 0.3124 * e + 0.2303 * f)',
     {
         'a': image.select('SR_B1'), 'b': image.select('SR_B2'), 'c': image.select('SR_B3'),
         'd': image.select('SR_B4'), 'e': image.select('SR_B5'), 'f': image.select('SR_B7')
     }) \
     .rename('TCB')
     tcg = image.expression(
-    '(-0.1603*a - 0.2819*b - 0.4934*c + 0.7940*d - 0.0002*e - 0.1446*f) * 0.0001',
+    '(-0.1603*a - 0.2819*b - 0.4934*c + 0.7940*d - 0.0002*e - 0.1446*f)',
     {
         'a': image.select('SR_B1'), 'b': image.select('SR_B2'), 'c': image.select('SR_B3'),
         'd': image.select('SR_B4'), 'e': image.select('SR_B5'), 'f': image.select('SR_B7')
     }) \
     .rename('TCG')
     tcw = image.expression(
-    '(0.0315* + 0.2021*b + 0.3102*c + 0.1594*d -0.6806*e -0.6109*f) * 0.0001',
+    '(0.0315* + 0.2021*b + 0.3102*c + 0.1594*d -0.6806*e -0.6109*f)',
     {
         'a': image.select('SR_B1'), 'b': image.select('SR_B2'), 'c': image.select('SR_B3'),
         'd': image.select('SR_B4'), 'e': image.select('SR_B5'), 'f': image.select('SR_B7')
@@ -42,6 +42,29 @@ def tc(image):
     .rename('TCW')
     return (image.addBands(tcb).addBands(tcg).addBands(tcw)).toFloat()
 
+def tc8(image):
+    tcb = image.expression(
+    '(0.3029 * a + 0.2786 * b + 0.4733 * c + 0.5599 * d + 0.508 * e + 0.1872 * f) * 0.0001',
+    {
+        'a': image.select('B2'), 'b': image.select('B3'), 'c': image.select('B4'),
+        'd': image.select('B5'), 'e': image.select('B6'), 'f': image.select('B7')
+    }) \
+    .rename('TCB')
+    tcg = image.expression(
+    '(-0.2941*a - 0.243*b - 0.5424*c + 0.7276*d + 0.0713*e - 0.1608*f) * 0.0001',
+    {
+        'a': image.select('B1'), 'b': image.select('B2'), 'c': image.select('B3'),
+        'd': image.select('B4'), 'e': image.select('B5'), 'f': image.select('B7')
+    }) \
+    .rename('TCG')
+    tcw = image.expression(
+    '(0.1511*a + 0.1973*b + 0.3283*c + 0.3407*d - 0.7117*e - 0.4559*f) * 0.0001',
+    {
+        'a': image.select('B1'), 'b': image.select('B2'), 'c': image.select('B3'),
+        'd': image.select('B4'), 'e': image.select('B5'), 'f': image.select('B7')
+    }) \
+    .rename('TCW')
+    return  (image.addBands(tcb).addBands(tcg).addBands(tcw)).toFloat()
 
 #def tc(image):
 #    """
