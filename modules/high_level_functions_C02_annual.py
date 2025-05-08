@@ -38,10 +38,18 @@ def make_annual_mosaics(collection, startyear, endyear):
   """
   annual_mosaics = ee.List([])
   for year in range(startyear, endyear, 1):
-      yearly = collection.filter(ee.Filter.calendarRange(year, year, 'year'))
+      # filter collection down to specific year
+      start_date = f'{year}-01-01'
+      end_date = f'{year}-12-31'
+      yearly = collection.filterDate(start_date, end_date)
+      # yearly = collection.filter(ee.Filter.calendarRange(year, year, 'year'))
+      # calculate median and add to new mosaic image
       mosaic = yearly.reduce(ee.Reducer.median())
-      mosaic = mosaic.set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
       mosaic = mosaic.addBands(ee.Image.constant(year).rename('Year').toFloat())
+      # add metadata
+      mosaic = mosaic.set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
+      mosaic = mosaic.set('id', f'Landsat Annual Mosaic {year}')
+      mosaic = mosaic.set('name', f'{year}')
       annual_mosaics = annual_mosaics.add(mosaic)
   return ee.ImageCollection.fromImages(annual_mosaics)
 
