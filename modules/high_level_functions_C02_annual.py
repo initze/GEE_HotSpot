@@ -75,7 +75,7 @@ def runTCTrend(config_trend):
   
   startyear = config_trend['STARTYEAR']
   endyear = config_trend['ENDYEAR']
-  annual_collection = make_annual_mosaics(collection, startyear, endyear)
+  annual_collection = make_annual_mosaics(collection, startyear, endyear+1) # end year must be one later trhan REAL endyear (python loop syntax)
 
   # TODO: This part here breaks the Collection
 
@@ -104,7 +104,7 @@ def runTCTrend(config_trend):
      
   return {'visual': trend_image_visual,
           'data': trend_image,
-          'image_collection': collection,
+          'image_collection': annual_collection,
           'n_observations': image_observations.uint16()
   }
 
