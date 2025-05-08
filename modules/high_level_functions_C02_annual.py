@@ -31,6 +31,20 @@ def add_external_mask(external_mask):
         return image.updateMask(combined_mask)
     return wrap
 
+  #Create yearly median date function
+def make_annual_mosaics(collection, startyear, endyear):
+  """
+  Creates an ImageCollection of annual median mosaics from the input collection.
+  """
+  annual_mosaics = ee.List([])
+  for year in range(startyear, endyear, 1):
+      yearly = collection.filter(ee.Filter.calendarRange(year, year, 'year'))
+      mosaic = yearly.reduce(ee.Reducer.median())
+      mosaic = mosaic.set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
+      mosaic = mosaic.addBands(ee.Image.constant(year).rename('Year').toFloat())
+      annual_mosaics = annual_mosaics.add(mosaic)
+  return ee.ImageCollection.fromImages(annual_mosaics)
+
 
 def runTCTrend(config_trend):
   # 1. load Landsat data and calculate indices
@@ -57,28 +71,31 @@ def runTCTrend(config_trend):
   print(config_trend['select_bands_visible'])
   def mask_outliers(image):
       return utils_LS.update_mask_by_std(image, lower, upper, config_trend['select_bands_visible'])
-  #collection = collection.map(mask_outliers)
+  #annual_collection = collection.map(mask_outliers)
   
-  # TODO: calculate annaul mosaic here
+  startyear = config_trend['STARTYEAR']
+  endyear = config_trend['ENDYEAR']
+  annual_collection = make_annual_mosaics(collection, startyear, endyear)
+
   # TODO: This part here breaks the Collection
 
   # 3. Calculate image pixel count
-  image_observations = collection.count().select([1], ['nObservations'])
+  image_observations = annual_collection.count().select([1], ['nObservations'])
+  #image_observations = collection.count().select([1], ['nObservations'])
   #image_total_count = collection.count().select([0], ['imageCount'])
 
   # 4. Calculate trend 
   trend_image = ee.Image()
   print(config_trend['select_indices'])
   for index in config_trend['select_indices']:
-    # TODO: change 'Date' to 'Year'
-    trend = ee.ImageCollection(collection.select(['Date', index])) \
+    trend = ee.ImageCollection(annual_collection.select(['Year', index + '_median'])) \
       .reduce(ee.Reducer.linearFit().unweighted()) \
       .select(['scale', 'offset', 'scale', 'scale'], 
               [index + '_slope', index + '_offset', index + '_upper', index + '_lower'])
     trend_image = trend_image.addBands(trend).clip(config_trend['geom'])
 
   # TODO: change factor to 10
-  trend_image = trend_image.multiply(ee.Image.constant(3650))
+  trend_image = trend_image.multiply(ee.Image.constant(10))
 
   # 6. Create visual output 
   trend_image_visual = trend_image.select(config_trend['select_TCtrend_bands']) \

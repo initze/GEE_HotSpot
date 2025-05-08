@@ -6,14 +6,13 @@ Created on Wed Sep 29 13:57:56 2021
 """
 
 import ee
-from . import ms_indices_C02 as indices
 
-def scale_offset(image: ee.image) -> ee.Image:
-  """
-  apply scale and offset and calculate reflectances from 0 to 1 range
-  """
-  opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
-  return image.addBands(opticalBands, names=None, overwrite=True)
+#def scale_offset(image: ee.image) -> ee.Image:
+#  """
+#  apply scale and offset and calculate reflectances from 0 to 1 range
+#  """
+#  opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+#  return image.addBands(opticalBands, names=None, overwrite=True)
 
 
 def harmonizationRoy(oli):
