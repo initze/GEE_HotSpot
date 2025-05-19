@@ -1,0 +1,205 @@
+# -*- coding: utf-8 -*-
+"""
+Created on Wed Sep 29 13:57:56 2021
+
+@author: initze
+"""
+
+import ee
+
+#def scale_offset(image: ee.image) -> ee.Image:
+#  """
+#  apply scale and offset and calculate reflectances from 0 to 1 range
+#  """
+#  opticalBands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+#  return image.addBands(opticalBands, names=None, overwrite=True)
+
+
+def harmonizationRoy(oli):
+    slopes = ee.Image.constant([0.9785, 0.9542, 0.9825, 1.0073, 1.0171, 0.9949])
+    itcp = ee.Image.constant([-0.0095, -0.0016, -0.0022, -0.0021, -0.0030, 0.0029])
+    y = oli.select(['SR_B2','SR_B3','SR_B4','SR_B5','SR_B6','SR_B7'],
+                   ['SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7']) \
+           .resample('bicubic') \
+           .subtract(itcp).divide(slopes) \
+           .set('system:time_start', oli.get('system:time_start'))
+    y = y.set('image_id', oli.id())  # Add image ID here
+    y = y.addBands(oli.select(['QA_PIXEL']))
+    y = y.copyProperties(oli, oli.propertyNames())
+    # return y.toShort().addBands(oli.select(['QA_PIXEL']))
+    return y
+
+def maskLsSr(image):
+  """
+  Create Cloud, Cloud Shadow and Snow/Ice Mask (no terrain shadow mask)
+  """
+  qa = image.select('QA_PIXEL')
+
+    # Einzelne QA-Bits extrahieren
+  cloud_conf = qa.rightShift(8).bitwiseAnd(3).eq(3)       # Bits 8–9: Cloud Confidence    
+  shadow_conf = qa.rightShift(10).bitwiseAnd(3).eq(3)     # Bits 10–11: Shadow Confidence
+  snow_conf = qa.rightShift(12).bitwiseAnd(3).eq(3)       # Bits 12–13: Snow/Ice Confidence
+  fill = qa.bitwiseAnd(1 << 0).eq(0)                      # Bit 0: Fill (gültige Pixel)
+
+    # Maske: gültige Pixel sind NICHT stark bewölkt, kein Schatten, kein Schnee, kein Fill
+  mask = cloud_conf.Or(shadow_conf).Or(snow_conf).Not().And(fill)
+
+  return image.updateMask(mask)
+ 
+ 
+ 
+  #cloudShadowBitMask = (1 << 4)
+  #snowBitMask = (1 << 5)
+  #cloudsBitMask = (1 << 3)
+  ## Get the pixel QA band.
+  #qa = image.select('QA_PIXEL')
+  ## Both flags should be set to zero, indicating clear conditions.
+  #mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0) \
+  #               .And(qa.bitwiseAnd(snowBitMask).eq(0)) \
+  #               .And(qa.bitwiseAnd(cloudsBitMask).eq(0))
+  #return image.updateMask(mask)
+
+
+
+# -------------- TESTING REQUIRED --------------
+#Create yearly median date function
+def yearly_median(image_collection, startyear, endyear):
+  #get image years of full collection
+  reduced_image_collection = ee.List([])
+  #iterate over each year - Needs testing
+  for year in range(startyear, endyear, 1):
+      im = image_collection.filter(ee.Filter.calendarRange(year, year, 'year')) \
+      .reduce(ee.Reducer.median()) \
+      .set({'id': year})
+      # make band for each year, needs explicit variable, otherwise error
+      year_band = ee.Image.constant(year).toFloat().rename('Year')
+      im = im.addBands(year_band)
+    
+      reduced_image_collection = reduced_image_collection.add(im)
+  #print (year)
+
+  return ee.ImageCollection.fromImages(reduced_image_collection)
+
+#--------------------------------------------------------------------------------------------------------------------------
+
+# function calculates mean +- standard deviation bvalues for each band and pixel
+def calculate_std_diff(imageCollection, n_std):
+  #collection = collection.select(config['select_bands_visible'])  
+  band_names = imageCollection.first().bandNames()
+  collection_mean = imageCollection.reduce(ee.Reducer.mean()).rename(band_names)
+  collection_std = imageCollection.reduce(ee.Reducer.stdDev()).rename(band_names).multiply(ee.Image.constant(n_std)) 
+
+  lower = collection_mean.subtract(collection_std)
+  upper = collection_mean.add(collection_std)
+  return [lower, upper]
+
+
+# function calculates mean +- standard deviation bvalues for each band and pixel - more efficient version?
+def calculate_std_diff_2(imageCollection, n_std):
+  reducer = ee.Reducer.mean().combine({
+    'reducer2': ee.Reducer.stdDev(),
+    'sharedInputs': True
+  })
+
+  band_names = imageCollection.first().bandNames()
+  stats = imageCollection.reduce(reducer)
+
+  # Extract means and SDs to images.
+  collection_mean = stats \
+                      .select('.*_mean') \
+                      .rename(band_names)
+  collection_std = stats \
+                    .select('.*_stdDev') \
+                    .rename(band_names) \
+                    .multiply(ee.Image.constant(n_std))
+
+  lower = collection_mean.subtract(collection_std)
+  upper = collection_mean.add(collection_std)
+  return [lower, upper]
+
+
+# function masks all pixels outside the lower and upper boundary limits
+def update_mask_by_std(image, lower_limits, upper_limits, band_selection):
+  updated_mask = image.lt(upper_limits).And(image.gt(lower_limits)).select(band_selection).reduce(ee.Reducer.min())
+  final_mask = image.mask().multiply(updated_mask)
+  return image.updateMask(final_mask)
+
+#--------------------------------------------------------------------------------------------------------------------------------------
+
+# function takes acquisition time and converts to decadal values
+def make_dateband(image):
+  factor = ee.Number(864000000000)
+  time = ee.Number(image.get("system:time_start"))
+  time2 = time.toDouble().divide(factor)
+  date_image = ee.Image.constant(time2).toFloat().select([0], ['Date'])
+  #TODO: rename to 'Date'
+  return image.addBands(date_image)
+
+# Applies scaling factors.
+def scale_offset(image):
+  optical_bands = image.select('SR_B.').multiply(0.0000275).add(-0.2)
+  return image.addBands(optical_bands, None, True)
+
+
+def preprocessed_L9_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
+  collection = ee.ImageCollection(dataset_name)\
+  .filterBounds(bbox)\
+  .filter(date_filter_yr)\
+  .filter(date_filter_mth)\
+  .filter(meta_filter_cld)\
+  .map(scale_offset)\
+  .map(maskLsSr)\
+  .map(harmonizationRoy)\
+  .map(make_dateband)\
+  .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
+  return collection
+
+def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
+  collection = ee.ImageCollection(dataset_name)\
+  .filterBounds(bbox)\
+  .filter(date_filter_yr)\
+  .filter(date_filter_mth)\
+  .filter(meta_filter_cld)\
+  .map(scale_offset)\
+  .map(maskLsSr)\
+  .map(harmonizationRoy)\
+  .map(make_dateband)\
+  .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
+  return collection
+
+def preprocessed_L57_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
+  collection = ee.ImageCollection(dataset_name)\
+  .filterBounds(bbox)\
+  .filter(date_filter_yr)\
+  .filter(date_filter_mth)\
+  .filter(meta_filter_cld)\
+  .map(scale_offset)\
+  .map(maskLsSr)\
+  .map(make_dateband)\
+  .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
+  return collection
+
+
+def makeLandsatSeriesSr(bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
+  l5 = preprocessed_L57_collection('LANDSAT/LT05/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
+  l7 = preprocessed_L57_collection('LANDSAT/LE07/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
+  l8 = preprocessed_L8_collection('LANDSAT/LC08/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld) 
+  l9 = preprocessed_L9_collection('LANDSAT/LC09/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld) 
+  return l5.merge(l7).merge(l8).merge(l9)
+
+
+# create geometries from lists of longitude and latitute coordinates
+# returns list
+def geoms_from_coordlists(longitudes, latitudes, sizeLon, sizeLat):
+  geoms = ee.List([])
+  for i in longitudes:
+    for j in latitudes:
+      #code create geometry
+      print(longitudes[i], latitudes[j])
+      geom = ee.Geometry.Rectangle([longitudes[i], latitudes[j], longitudes[i]+ sizeLon, latitudes[j]+sizeLat])
+      geoms = geoms.add(geom)
+  return geoms
+
+# remove bands by regex
+def remove_bands(image, band_name):
+  return image.select(image.bandNames().filter(ee.Filter.stringContains('item', band_name).Not()))
