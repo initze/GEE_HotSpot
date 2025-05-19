@@ -64,9 +64,11 @@ def yearly_median(image_collection, startyear, endyear):
 
   return ee.ImageCollection.fromImages(reduced_image_collection)
 
+#--------------------------------------------------------------------------------------------------------------------------
 
 # function calculates mean +- standard deviation bvalues for each band and pixel
 def calculate_std_diff(imageCollection, n_std):
+  #collection = collection.select(config['select_bands_visible'])  
   band_names = imageCollection.first().bandNames()
   collection_mean = imageCollection \
   .reduce(ee.Reducer.mean()) \
@@ -74,7 +76,7 @@ def calculate_std_diff(imageCollection, n_std):
   collection_std = imageCollection \
   .reduce(ee.Reducer.stdDev()) \
   .rename(band_names) \
-  .multiply(ee.Image.constant(3)) 
+  .multiply(ee.Image.constant(n_std)) #3
 
   lower = collection_mean.subtract(collection_std)
   upper = collection_mean.add(collection_std)
@@ -114,6 +116,7 @@ def update_mask_by_std(image, lower_limits, upper_limits, band_selection):
   final_mask = image.mask().multiply(updated_mask)
   return image.updateMask(final_mask)
 
+#--------------------------------------------------------------------------------------------------------------------------------------
 
 # function takes acquisition time and converts to decadal values
 def make_dateband(image):
