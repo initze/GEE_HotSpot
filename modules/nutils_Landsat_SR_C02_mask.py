@@ -29,21 +29,37 @@ def harmonizationRoy(oli):
     # return y.toShort().addBands(oli.select(['QA_PIXEL']))
     return y
 
-
 def maskLsSr(image):
   """
   Create Cloud, Cloud Shadow and Snow/Ice Mask (no terrain shadow mask)
   """
-  cloudShadowBitMask = (1 << 4)
-  snowBitMask = (1 << 5)
-  cloudsBitMask = (1 << 3)
-  # Get the pixel QA band.
   qa = image.select('QA_PIXEL')
-  # Both flags should be set to zero, indicating clear conditions.
-  mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0) \
-                 .And(qa.bitwiseAnd(snowBitMask).eq(0)) \
-                 .And(qa.bitwiseAnd(cloudsBitMask).eq(0))
+
+    # Einzelne QA-Bits extrahieren
+  cloud_conf = qa.rightShift(8).bitwiseAnd(3).eq(3)       # Bits 8–9: Cloud Confidence    
+  shadow_conf = qa.rightShift(10).bitwiseAnd(3).eq(3)     # Bits 10–11: Shadow Confidence
+  snow_conf = qa.rightShift(12).bitwiseAnd(3).eq(3)       # Bits 12–13: Snow/Ice Confidence
+  fill = qa.bitwiseAnd(1 << 0).eq(0)                      # Bit 0: Fill (gültige Pixel)
+
+    # Maske: gültige Pixel sind NICHT stark bewölkt, kein Schatten, kein Schnee, kein Fill
+  mask = cloud_conf.Or(shadow_conf).Or(snow_conf).Not().And(fill)
+
   return image.updateMask(mask)
+ 
+ 
+ 
+  #cloudShadowBitMask = (1 << 4)
+  #snowBitMask = (1 << 5)
+  #cloudsBitMask = (1 << 3)
+  ## Get the pixel QA band.
+  #qa = image.select('QA_PIXEL')
+  ## Both flags should be set to zero, indicating clear conditions.
+  #mask = qa.bitwiseAnd(cloudShadowBitMask).eq(0) \
+  #               .And(qa.bitwiseAnd(snowBitMask).eq(0)) \
+  #               .And(qa.bitwiseAnd(cloudsBitMask).eq(0))
+  #return image.updateMask(mask)
+
+
 
 # -------------- TESTING REQUIRED --------------
 #Create yearly median date function
@@ -70,13 +86,8 @@ def yearly_median(image_collection, startyear, endyear):
 def calculate_std_diff(imageCollection, n_std):
   #collection = collection.select(config['select_bands_visible'])  
   band_names = imageCollection.first().bandNames()
-  collection_mean = imageCollection \
-  .reduce(ee.Reducer.mean()) \
-  .rename(band_names)
-  collection_std = imageCollection \
-  .reduce(ee.Reducer.stdDev()) \
-  .rename(band_names) \
-  .multiply(ee.Image.constant(n_std)) #3
+  collection_mean = imageCollection.reduce(ee.Reducer.mean()).rename(band_names)
+  collection_std = imageCollection.reduce(ee.Reducer.stdDev()).rename(band_names).multiply(ee.Image.constant(n_std)) 
 
   lower = collection_mean.subtract(collection_std)
   upper = collection_mean.add(collection_std)
@@ -109,10 +120,7 @@ def calculate_std_diff_2(imageCollection, n_std):
 
 # function masks all pixels outside the lower and upper boundary limits
 def update_mask_by_std(image, lower_limits, upper_limits, band_selection):
-  updated_mask = image.lt(upper_limits) \
-  .And(image.gt(lower_limits)) \
-  .select(band_selection) \
-  .reduce(ee.Reducer.min())
+  updated_mask = image.lt(upper_limits).And(image.gt(lower_limits)).select(band_selection).reduce(ee.Reducer.min())
   final_mask = image.mask().multiply(updated_mask)
   return image.updateMask(final_mask)
 
@@ -133,7 +141,7 @@ def scale_offset(image):
   return image.addBands(optical_bands, None, True)
 
 
-def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
+def preprocessed_L9_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
   collection = ee.ImageCollection(dataset_name)\
   .filterBounds(bbox)\
   .filter(date_filter_yr)\
@@ -146,6 +154,18 @@ def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_m
   .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
   return collection
 
+def preprocessed_L8_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
+  collection = ee.ImageCollection(dataset_name)\
+  .filterBounds(bbox)\
+  .filter(date_filter_yr)\
+  .filter(date_filter_mth)\
+  .filter(meta_filter_cld)\
+  .map(scale_offset)\
+  .map(maskLsSr)\
+  .map(harmonizationRoy)\
+  .map(make_dateband)\
+  .select('SR_B1', 'SR_B2', 'SR_B3', 'SR_B4', 'SR_B5', 'SR_B7', 'QA_PIXEL', 'Date')
+  return collection
 
 def preprocessed_L57_collection(dataset_name, bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
   collection = ee.ImageCollection(dataset_name)\
@@ -164,7 +184,8 @@ def makeLandsatSeriesSr(bbox, date_filter_yr, date_filter_mth, meta_filter_cld):
   l5 = preprocessed_L57_collection('LANDSAT/LT05/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
   l7 = preprocessed_L57_collection('LANDSAT/LE07/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld)
   l8 = preprocessed_L8_collection('LANDSAT/LC08/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld) 
-  return l5.merge(l7).merge(l8)
+  l9 = preprocessed_L9_collection('LANDSAT/LC09/C02/T1_L2', bbox, date_filter_yr, date_filter_mth, meta_filter_cld) 
+  return l5.merge(l7).merge(l8).merge(l9)
 
 
 # create geometries from lists of longitude and latitute coordinates

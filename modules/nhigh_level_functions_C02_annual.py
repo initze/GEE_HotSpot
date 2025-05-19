@@ -7,11 +7,11 @@ import ee
 from modules import configs
 from modules import utils_string
 from modules import ms_indices_C02 as indices
-from modules import utils_Landsat_SR_C02_mask as utils_LS
+from modules import nutils_Landsat_SR_C02_mask as nutils_LS
 
 def makeLandsatSeriesSrFiltered(config):
     # 1. load Landsat data and calculate indices
-    collection = utils_LS.makeLandsatSeriesSr(config['geom'], config['date_filter_yr'], config['date_filter_mth'], config['meta_filter_cld'])\
+    collection = nutils_LS.makeLandsatSeriesSr(config['geom'], config['date_filter_yr'], config['date_filter_mth'], config['meta_filter_cld'])\
     .map(indices.ndvi) \
     .map(indices.ndmi) \
     .map(indices.ndwi) \
@@ -19,11 +19,11 @@ def makeLandsatSeriesSrFiltered(config):
 
 #----------------------------------------------------------------------------------------------------------------------mask- both unnessecary?
     # 2. Filter pixels off 3 std from mean
-    std_diff = utils_LS.calculate_std_diff(collection, 3)
+    std_diff = nutils_LS.calculate_std_diff(collection, 3)
     lower = std_diff[0]
     upper = std_diff[1]
     def func_gsi(image):
-        return utils_LS.update_mask_by_std(image, lower, upper, configs.select_bands_visible)    
+        return nutils_LS.update_mask_by_std(image, lower, upper, configs.select_bands_visible)    
     #collection = collection.map(func_gsi)
     
     return collection
@@ -37,61 +37,61 @@ def add_external_mask(external_mask): #????
 #---------------------------------------------------------------------------------------------------------------------------------
 
 #Old Annual Mosaic function without filtering empty mosaics
-def make_annual_mosaics(collection, startyear, endyear):
-  """
-  Creates an ImageCollection of annual median mosaics from the input collection.
-  """
-  annual_mosaics = ee.List([])
-  for year in range(startyear, endyear, 1):
-      # filter collection down to specific year
-      start_date = f'{year}-01-01'
-      end_date = f'{year}-12-31'
-      yearly = collection.filterDate(start_date, end_date)
-
-      yearly = collection.filter(ee.Filter.calendarRange(year, year, 'year'))
-      # calculate median and add to new mosaic image
-      mosaic = yearly.reduce(ee.Reducer.median())
-      mosaic = mosaic.addBands(ee.Image.constant(year).rename('Year').toFloat())
-      # add metadata
-      mosaic = mosaic.set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
-      mosaic = mosaic.set('id', f'Landsat Annual Mosaic {year}')
-      mosaic = mosaic.set('name', f'{year}')
-      annual_mosaics = annual_mosaics.add(mosaic)
-  return ee.ImageCollection.fromImages(annual_mosaics)
-
 #def make_annual_mosaics(collection, startyear, endyear):
 #  """
 #  Creates an ImageCollection of annual median mosaics from the input collection.
 #  """
-#  def make_mosaic(year):
-#      year = ee.Number(year)
+#  annual_mosaics = ee.List([])
+#  for year in range(startyear, endyear, 1):
+#      # filter collection down to specific year
+#      start_date = f'{year}-01-01'
+#      end_date = f'{year}-12-31'
+#      yearly = collection.filterDate(start_date, end_date)
+
 #      yearly = collection.filter(ee.Filter.calendarRange(year, year, 'year'))
+#      # calculate median and add to new mosaic image
+#      mosaic = yearly.reduce(ee.Reducer.median())
+#      mosaic = mosaic.addBands(ee.Image.constant(year).rename('Year').toFloat())
+#      # add metadata
+#      mosaic = mosaic.set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
+#      mosaic = mosaic.set('id', f'Landsat Annual Mosaic {year}')
+#      mosaic = mosaic.set('name', f'{year}')
+#      annual_mosaics = annual_mosaics.add(mosaic)
+#  return ee.ImageCollection.fromImages(annual_mosaics)
 
-#      size = yearly.size()
+def make_annual_mosaics(collection, startyear, endyear):
+  """
+  Creates an ImageCollection of annual median mosaics from the input collection.
+  """
+  def make_mosaic(year):
+      year = ee.Number(year)
+      yearly = collection.filter(ee.Filter.calendarRange(year, year, 'year'))
 
-#      return ee.Algorithms.If(
-#          size.gt(0),
-#          yearly.reduce(ee.Reducer.median())
-#              .addBands(ee.Image.constant(year).rename('Year').toFloat())
- #             .set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
-#             .set('id', ee.String('Landsat Annual Mosaic ').cat(year.format()))
-#              .set('name', year.format()),
-#          None
-#      )
+      size = yearly.size()
 
-#  years = ee.List.sequence(startyear, endyear - 1)
-#  mosaics = years.map(make_mosaic)
+      return ee.Algorithms.If(
+          size.gt(0),
+          yearly.reduce(ee.Reducer.median())
+              .addBands(ee.Image.constant(year).rename('Year').toFloat())
+              .set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
+              .set('id', ee.String('Landsat Annual Mosaic ').cat(year.format()))
+              .set('name', year.format()),
+          None
+      )
+
+  years = ee.List.sequence(startyear, endyear - 1)
+  mosaics = years.map(make_mosaic)
 
   # Entferne None-Einträge (Jahre ohne Bilder)
-#  mosaics_clean = mosaics.removeAll([None])
+  annual_mosaics = mosaics.removeAll([None])
 
-#  return ee.ImageCollection.fromImages(mosaics_clean)
+  return ee.ImageCollection.fromImages(annual_mosaics)
 
 
 
-def runTCTrend(config_trend):
+def nrunTCTrend(config_trend):
   # 1. load Landsat data and calculate indices
-  collection = utils_LS.makeLandsatSeriesSr(config_trend['geom'], 
+  collection = nutils_LS.makeLandsatSeriesSr(config_trend['geom'], 
                                             config_trend['date_filter_yr'], 
                                             config_trend['date_filter_mth'], 
                                             config_trend['meta_filter_cld']) \
@@ -107,19 +107,20 @@ def runTCTrend(config_trend):
           print('Mask Layer is not an ee.Image instance')
 
   # 2. Filter pixels off 3 std from mean
-  std_diff = utils_LS.calculate_std_diff(collection, 2)
+  std_diff = nutils_LS.calculate_std_diff(collection, 2)
   lower = std_diff[0]
   upper = std_diff[1]
   
   print(config_trend['select_bands_visible'])
   def mask_outliers(image):
-      return utils_LS.update_mask_by_std(image, lower, upper, config_trend['select_bands_visible'])
+      return nutils_LS.update_mask_by_std(image, lower, upper, config_trend['select_bands_visible'])
   masked_collection = collection.map(mask_outliers)
   #annual_collection = collection.map(mask_outliers)
   
   startyear = config_trend['STARTYEAR']
   endyear = config_trend['ENDYEAR']
-  annual_collection = make_annual_mosaics(masked_collection, startyear, endyear+1) # end year must be one later than REAL endyear (python loop syntax)
+  annual_collection = make_annual_mosaics(masked_collection, startyear, endyear+1)
+  #annual_collection = make_annual_mosaics(collection, startyear, endyear+1) # end year must be one later trhan REAL endyear (python loop syntax)
 
 
   # 3. Calculate image pixel count
@@ -178,7 +179,7 @@ def runTCTrend(config_trend):
           'data': trend_image,
           'image_collection': annual_collection,
           'n_observations': image_observations.uint16(),
-          'image_collection_original': masked_collection #collection
+          'nimage_collection_original': masked_collection #collection
   }
 
 
