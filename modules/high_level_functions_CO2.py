@@ -82,7 +82,8 @@ def runTCTrend(config_trend):
 #      if isinstance(config_trend['mask'], ee.Image):
 #        collection = collection.map(add_external_mask(config_trend['mask']))
 #      else:
-#          print('Mask Layer is not an ee.Image instance')
+#
+#      print('Mask Layer is not an ee.Image instance')
 #-------------------------------------------------------------------------------------------------------------------------
 
   # 2. Filter pixels off 2 std from mean
@@ -116,17 +117,32 @@ def runTCTrend(config_trend):
     trend_image = trend_image.addBands(trend).clip(config_trend['geom'])
 
   trend_image = trend_image.multiply(ee.Image.constant(10))
+  trend_image = trend_image.set({
+    'description': 'TCVIS trend image',
+    'start_year': config_trend['STARTYEAR'],
+    'end_year': config_trend['ENDYEAR'],
+    'max_cloud_cover': config_trend['max_cloud_cover'],
+})
+
 
   # 6. Create visual output 
   trend_image_visual = trend_image.select(config_trend['select_TCtrend_bands']) \
                                   .unitScale(-0.12, 0.12)\
-                                  .multiply(ee.Image.constant(255)).uint8() 
+                                  .multiply(ee.Image.constant(255)).uint8()\
+                                  .set({
+                                    'description': 'TCVIS trend image',
+                                    'start_year': config_trend['STARTYEAR'],
+                                    'end_year': config_trend['ENDYEAR'],
+                                    'max_cloud_cover': config_trend['max_cloud_cover'],
+                                    'longitude': ','.join(map(str, config_trend['longitudes'])),
+                                    'latitude': ','.join(map(str, config_trend['latitudes']))
+                                  })
      
   return {'visual': trend_image_visual,
           'data': trend_image,
           'image_collection': annual_collection,
           'n_observations': image_observations.uint16(),
-          'nimage_collection_original': masked_collection 
+          'image_collection_original': masked_collection 
   }
 
 
