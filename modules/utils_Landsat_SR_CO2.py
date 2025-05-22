@@ -32,7 +32,7 @@ def maskLsSr(image):
   cloud_conf = qa.rightShift(8).bitwiseAnd(3).eq(3)       # Bits 8–9: Cloud Confidence    
   shadow_conf = qa.rightShift(10).bitwiseAnd(3).eq(3)     # Bits 10–11: Shadow Confidence
   snow_conf = qa.rightShift(12).bitwiseAnd(3).eq(3)       # Bits 12–13: Snow/Ice Confidence
-  fill = qa.bitwiseAnd(1 << 0).eq(0)                      # Bit 0: Fill (gültige Pixel)
+  fill = qa.bitwiseAnd(1 << 0).eq(0)                      # Bit 0: Fill
 
   mask = cloud_conf.Or(shadow_conf).Or(snow_conf).Not().And(fill)
 

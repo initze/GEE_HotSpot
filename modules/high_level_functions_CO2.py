@@ -124,6 +124,9 @@ def runTCTrend(config_trend):
     'max_cloud_cover': config_trend['max_cloud_cover'],
 })
 
+  # setup timestamps for image date metadata
+  date_start = ee.Date(f'{startyear}-07-01').millis()
+  date_end = ee.Date(f'{endyear}-08-31').millis()
 
   # 6. Create visual output 
   trend_image_visual = trend_image.select(config_trend['select_TCtrend_bands']) \
@@ -135,7 +138,9 @@ def runTCTrend(config_trend):
                                     'end_year': config_trend['ENDYEAR'],
                                     'max_cloud_cover': config_trend['max_cloud_cover'],
                                     'longitude': ','.join(map(str, config_trend['longitudes'])),
-                                    'latitude': ','.join(map(str, config_trend['latitudes']))
+                                    'latitude': ','.join(map(str, config_trend['latitudes'])),
+                                    'system:time_start': date_start,
+                                    'system:time_end': date_end,
                                   })
      
   return {'visual': trend_image_visual,
