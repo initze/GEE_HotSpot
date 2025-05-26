@@ -1,9 +1,18 @@
+[build-system]
+requires = ["setuptools"]
+build-backend = "setuptools.build_meta"
+
 [project]
-name = "gee-hotspot"
-version = "0.1.0"
-description = "Add your description here"
+name = "geehotspot"
+version = "0.7.0"
+description = "GEE HotSpot Trend creation package"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.11"
+authors = [
+    { name = "Ingmar Nitze", email = "ingmar.nitze@awi.de" },
+    { name = "Sina Pohlabeln"}
+]
+urls = {Homepage = "https://github.com/initze/GEE_HotSpot"}
 dependencies = [
     "earthengine-api>=1.5.12",
     "eemont>=0.3.6",
@@ -12,4 +21,6 @@ dependencies = [
     "ipywidgets>=8.1.6",
     "jupyterlab>=4.4.1",
     "leafmap>=0.43.6",
+    "numpy<2",
+    "pip>=25.1.1",
 ]
