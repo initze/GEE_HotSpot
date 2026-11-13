@@ -3,8 +3,8 @@ import ee
 
 from . import configs
 from . import utils_string
-from . import ms_indices as indices
-from . import utils_Landsat_SR as utils_LS
+from . import ms_indices_CO2 as indices
+from . import utils_Landsat_SR_CO1 as utils_LS
 
 
 def makeLandsatSeriesSrFiltered(config):
