@@ -36,3 +36,36 @@ https://ingmarnitze.users.earthengine.app/view/hotspottcvisapp
 ![grafik](https://user-images.githubusercontent.com/4864803/132830161-4b6afc31-12c8-446b-b5a9-86b04951c829.png)
 #### Example Batagaika Crater - TCVIS Layer
 ![grafik](https://user-images.githubusercontent.com/4864803/132830241-9f7e7fe2-3262-4c47-ad0c-0be5621ade4a.png)
+
+### Regional sample → local COG / Zarr
+
+`modules/regional_trend.py` wraps the production trend (`runTCTrend`) for a single
+bounding box and delivers the result locally instead of exporting an EE asset:
+
+```python
+from modules.regional_trend import RegionalTrend
+
+run = RegionalTrend(
+    lon=(-154.0, -153.5), lat=(70.7, 70.9),      # 154.0W-153.5W, 70.7-70.9N
+    years=(2007, 2026),                          # Jul-Aug, cloud < 70 %
+    project="pdg-wg-workflow",
+)
+run.to_cog("out/TCTrend_2007-2026_slope.tif")    # 3 slope bands, EPSG:3413, 30 m
+run.to_cog("out/TCTrend_2007-2026_nobs.tif", kind="observations")
+run.to_zarr("out/TCTrend_2007-2026_slope.zarr")
+run.quicklook("out/TCTrend_2007-2026.png")
+run.verify("out/TCTrend_2007-2026_slope.tif")    # CRS / bands / AOI-coverage checks
+```
+
+The same run from the shell:
+
+```bash
+uv sync
+uv run python scripts/regional_sample_cog.py --out-dir ../out
+```
+
+`notebooks/Regional_Sample_2007-2026.ipynb` walks through it cell by cell. Band values are
+TC slope × 10 — the factor exists only so the published uint8 visual fits 0..255 — and the
+`_nobs` band records per-pixel observation counts, which is how the thin early years (L5/L7
+only before 2013) show up.
+
