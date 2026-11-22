@@ -68,6 +68,8 @@ bandit.yaml
 # Environments
 .env
 .venv
+# uv lockfile is not committed: dev environments are resolved fresh with `uv sync`
+uv.lock
 ENV/
 env.bak/
 venv.bak/
