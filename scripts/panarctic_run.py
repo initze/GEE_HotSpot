@@ -191,6 +191,11 @@ def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
     config = dict(config, _fingerprint=fp, _tile=tile["id"])
 
     started = time.time()
+
+    def log(msg: str) -> None:
+        print(f"[{time.strftime('%H:%M:%S')}] +{time.time() - started:6.0f}s {tile['id']}: {msg}", flush=True)
+
+    log("building trend on Earth Engine (20 annual medians + 2-sigma mask)")
     run = RegionalTrend(
         lon=tuple(tile["lon"]),
         lat=tuple(tile["lat"]),
@@ -208,22 +213,29 @@ def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
     )
     grid = run.grid()
     width, height = grid["shape_2d"]
+    log(f"grid {width} x {height} px, {run.scale:g} m {run.crs}")
 
     written = {}
     for kind, ee_kind in (("visual", "visual"), ("nobs", "observations")):
         final = p[kind]
         tmp = final.with_suffix(".tmp.tif")
         tmp.unlink(missing_ok=True)
+        log(f"fetching {kind} ...")
         run.to_cog(tmp, kind=ee_kind)
+        log(f"{kind} fetched, COG written")
         # a COG is only allowed to appear under its final name once complete
         with rasterio.open(tmp, "r+") as src:
             src.update_tags(tile=tile["id"], config_hash=fp)
         os.replace(tmp, final)
         written[kind] = final
 
+    log("rendering quicklook")
     run.quicklook(p["png"], kind="visual")
+    log("verifying")
     checks = {"visual": run.verify(written["visual"], kind="visual"),
               "nobs": run.verify(written["nobs"], kind="observations")}
+    log("verified: " + ", ".join(
+        f"{b} valid {100 * s['valid_fraction']:.1f}%" for b, s in checks["visual"]["stats"].items()))
 
     marker = {
         "tile": tile["id"],
@@ -431,6 +443,7 @@ def main(argv=None) -> int:
     failures: list[tuple[str, str]] = []
     done = 0
     t0 = time.time()
+    last_beat = 0.0
     logged_tail: set[str] = set()
 
     def record(entry: dict):
@@ -469,6 +482,12 @@ def main(argv=None) -> int:
                 running[tile["id"]] = (spawn(tile), time.time(), 0)
 
             time.sleep(5)
+            if running and time.time() - last_beat >= 60:
+                last_beat = time.time()
+                now = time.time()
+                print("  ... " + ", ".join(
+                    f"{tid} {int((now - t_started) / 60)} min"
+                    for tid, (_proc, t_started, _a) in running.items()), flush=True)
             for tid, (proc, started, attempts) in list(running.items()):
                 finished = proc.poll() is not None
                 timed_out = bool(args.tile_timeout) and (time.time() - started > args.tile_timeout)
