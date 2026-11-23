@@ -60,9 +60,18 @@ def tile_id(lon0: float, lat0: float) -> str:
     return "%s%s" % (hemi(lon0, "E", "W"), hemi(lat0, "N", "S"))
 
 
-def tile_name(lon0: float, lat0: float, start: int, end: int) -> str:
-    """Production-style product name, e.g. TCTrend_SR_W170N60_2007-2026_TCVIS."""
-    return "TCTrend_SR_%s_%d-%d_TCVIS" % (tile_id(lon0, lat0), start, end)
+def tile_name(lon0: float, lat0: float, start: int, end: int,
+              cell_lon: float = 10.0, cell_lat: float = 5.0) -> str:
+    """Production-style product name, e.g. TCTrend_SR_W170N60_2007-2026_TCVIS.
+
+    A grid other than the legacy 10x5 gets a `_g<lon>x<lat>` suffix: `W170N60`
+    alone would mean both the 10x5 tile and the 1x1 cell at (-170, 60), and two
+    grids writing to one filename is how a product silently gets overwritten.
+    """
+    name = "TCTrend_SR_%s_%d-%d_TCVIS" % (tile_id(lon0, lat0), start, end)
+    if (float(cell_lon), float(cell_lat)) != (10.0, 5.0):
+        name += "_g%gx%g" % (float(cell_lon), float(cell_lat))
+    return name
 
 
 def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
@@ -77,7 +86,7 @@ def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
         while lat < lat_max:
             tiles.append({
                 "id": tile_id(lon, lat),
-                "name": tile_name(lon, lat, start, end),
+                "name": tile_name(lon, lat, start, end, cell_lon, cell_lat),
                 "lon": [lon, lon + cell_lon],
                 "lat": [lat, lat + cell_lat],
                 "mpx": tile_area(lat, cell_lat, cell_lon) / 0.0009 / 1e6,
@@ -237,9 +246,12 @@ def list_tiles(args, config, tiles, fp):
     print(f"product       {', '.join(PRODUCTS)} @ {args.scale:g} m, {args.crs}, no zarr")
     print(f"workers       {args.workers}")
     print(f"config hash   {fp}")
+    if (args.cell_lon, args.cell_lat) != (10.0, 5.0):
+        print(f"note          non-legacy grid -> filenames carry _g{args.cell_lon:g}x{args.cell_lat:g}")
     print()
     print("%-12s %-40s %9s %8s" % ("tile", "name", "Mpx", "est. h"))
-    for t in tiles:
+    ordered = sorted(tiles, key=lambda t: (-t["mpx"], t["lon"][0], t["lat"][0]))
+    for t in ordered:
         print("%-12s %-40s %9.1f %8.1f" % (
             t["id"], t["name"], t["mpx"],
             t["mpx"] * 1e6 / (MEASURED_PX_PER_S * 3600)))
@@ -326,7 +338,7 @@ def main(argv=None) -> int:
             skipped.append(t)
         else:
             queue.append(t)
-    queue.sort(key=lambda t: -t["mpx"])        # longest first: shorter tail
+    queue.sort(key=lambda t: (-t["mpx"], t["lon"][0], t["lat"][0]))
 
     total_mpx = sum(t["mpx"] for t in queue)
     print(f"config {fp} | {len(tiles)} tiles selected | {len(skipped)} already complete")
@@ -338,6 +350,10 @@ def main(argv=None) -> int:
     if not queue:
         print("nothing to do")
         return 0
+    print("first up:", ", ".join(t["id"] for t in queue[:min(8, len(queue))]))
+    print(f"tile size: {queue[0]['lat'][1] - queue[0]['lat'][0]:g} x "
+          f"{queue[0]['lon'][1] - queue[0]['lon'][0]:g} deg "
+          f"({queue[0]['mpx']:.1f} Mpx each)")
 
     manifest = out_root / "run_manifest.jsonl"
     running: dict[str, tuple[subprocess.Popen, float, int]] = {}
