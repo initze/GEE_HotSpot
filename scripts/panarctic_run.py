@@ -421,7 +421,7 @@ def main(argv=None) -> int:
         handle = p["log"].open("a" if append_log else "w")
         cmd = [sys.executable, "-u", str(REPO / "scripts" / "panarctic_run.py"),
                "--run-tile", tile["id"], "--config-file", str(config_file)]
-        print(f"  start {tile['id']} ({tile['mpx']:.0f} Mpx) -> {p['log'].name}")
+        print(f"  start {tile['id']} ({tile['mpx']:.0f} Mpx) -> {p['log']}")
         return subprocess.Popen(cmd, cwd=str(REPO), stdout=handle, stderr=subprocess.STDOUT)
 
     def show_tail(tile: dict, lines: int = 15):
