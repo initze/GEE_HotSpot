@@ -51,6 +51,50 @@ PRODUCTS = ("visual", "nobs")
 
 
 # ----------------------------------------------------------------- tile grid
+def crs_units_per_ground_metre(crs: str, lon: float, lat: float) -> float:
+    """Local scale factor of a conformal projected CRS (3857 at 65N -> 2.37)."""
+    from pyproj import CRS as ProjCRS
+    from pyproj import Proj
+
+    parsed = ProjCRS.from_user_input(crs)
+    if parsed.is_geographic:
+        raise SystemExit(
+            f"--scale-mode ground needs a projected CRS; {crs} is geographic, where a "
+            "'ground metre' differs in x and y. Use --scale-mode crs for a geographic CRS.")
+    factors = Proj(parsed).get_factors(lon, lat)
+    # conformal CRSs have meridional_scale == parallel_scale, so either works
+    return float(factors.meridional_scale)
+
+
+def tile_scale(tile: dict, config: dict) -> float:
+    """CRS-unit pixel size for this tile.
+
+    ``crs``    -- --scale is in CRS units, which is what Earth Engine means by
+                  scale (30 in EPSG:3857 is 30 Mercator metres at any latitude).
+    ``ground`` -- --scale is metres on the ground; the CRS-unit size is derived
+                  per tile from the local scale factor, so a pan-Arctic product
+                  has the same physical resolution everywhere at the cost of a
+                  different pixel size per latitude row (mosaics then need
+                  resampling).
+    """
+    if config.get("scale_mode", "crs") != "ground":
+        return config["scale"]
+    mid_lon = sum(tile["lon"]) / 2
+    mid_lat = sum(tile["lat"]) / 2
+    return config["scale"] / crs_units_per_ground_metre(config["crs"], mid_lon, mid_lat)
+
+
+def ground_pixel_metres(crs: str, lon: float, lat: float, scale: float, mode: str) -> float:
+    """How big a pixel of ``scale`` CRS units actually is on the ground."""
+    from pyproj import CRS as ProjCRS
+
+    if ProjCRS.from_user_input(crs).is_geographic:
+        return scale * math.cos(math.radians(lat))
+    if mode == "ground":
+        return scale
+    return scale / crs_units_per_ground_metre(crs, lon, lat)
+
+
 def _decimals_for(cell: float) -> int:
     """Just enough decimals to make k*cell values distinct: 1 deg -> 0, 0.1 -> 1, 0.25 -> 2."""
     if cell >= 1:
@@ -97,7 +141,7 @@ def tile_name(lon0: float, lat0: float, start: int, end: int,
 
 
 def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
-                start=2007, end=2026, crs="EPSG:3857"):
+                start=2007, end=2026, crs="EPSG:3857", scale=30.0, scale_mode="crs"):
     """All grid tiles whose cell overlaps the requested bounds."""
     lon0 = math.floor(lon_min / cell_lon) * cell_lon
     lat0 = math.floor(lat_min / cell_lat) * cell_lat
@@ -106,12 +150,20 @@ def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
     while lon < lon_max:
         lat = lat0
         while lat < lat_max:
+            mid_lon, mid_lat = lon + cell_lon / 2, lat + cell_lat / 2
+            ground_px = ground_pixel_metres(crs, mid_lon, mid_lat, scale, scale_mode)
+            crs_px = scale if scale_mode != "ground" else (
+                scale / crs_units_per_ground_metre(crs, mid_lon, mid_lat))
+            area_m2 = tile_area(lat, cell_lat, cell_lon) * 1e6
             tiles.append({
                 "id": tile_id(lon, lat, cell_lon, cell_lat),
                 "name": tile_name(lon, lat, start, end, cell_lon, cell_lat, crs),
                 "lon": [lon, lon + cell_lon],
                 "lat": [lat, lat + cell_lat],
-                "mpx": tile_area(lat, cell_lat, cell_lon) / 0.0009 / 1e6,
+                "mid": [mid_lon, mid_lat],
+                "crs_px": round(crs_px, 3),
+                "ground_px": round(ground_px, 2),
+                "mpx": area_m2 / (ground_px * ground_px) / 1e6,
             })
             lat += cell_lat
         lon += cell_lon
@@ -132,6 +184,7 @@ def make_config(args) -> dict:
         "end_month": args.end_month,
         "max_cloud": args.max_cloud,
         "scale": args.scale,
+        "scale_mode": args.scale_mode,
         "crs": args.crs,
         "project": args.project,
         "products": list(PRODUCTS),
@@ -223,7 +276,7 @@ def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
         start_month=config["start_month"],
         end_month=config["end_month"],
         max_cloud=config["max_cloud"],
-        scale=config["scale"],
+        scale=tile_scale(tile, config),
         crs=config["crs"],
         project=config["project"],
         pin_native_grid=config["pin_native_grid"],
@@ -280,29 +333,37 @@ def child(args, config_file: Path, tile_id_wanted: str):
 
 
 def list_tiles(args, config, tiles, fp):
+    ordered = sorted(tiles, key=lambda t: (-t["mpx"], t["lon"][0], t["lat"][0]))
     total_mpx = sum(t["mpx"] for t in tiles)
-    hours = total_mpx / (MEASURED_PX_PER_S * args.workers) / 3600
+    hours = total_mpx * 1e6 / (MEASURED_PX_PER_S * args.workers) / 3600
     print(f"grid          {args.cell_lon:g} x {args.cell_lat:g} deg, lat >= {args.lat_min:g}")
     print(f"bounds        lon {args.lon_min:g}..{args.lon_max:g}  lat {args.lat_min:g}..{args.lat_max:g}")
     print(f"window        {args.start_year}-{args.end_year}, months {args.start_month}-{args.end_month}"
           f", cloud < {args.max_cloud}")
-    print(f"product       {', '.join(PRODUCTS)} @ {args.scale:g} m, {args.crs}, no zarr")
+    print(f"product       {', '.join(PRODUCTS)} @ {args.crs}, no zarr")
     print(f"workers       {args.workers}")
     print(f"config hash   {fp}")
     if (args.cell_lon, args.cell_lat) != (10.0, 5.0):
         print(f"note          non-legacy grid -> filenames carry _g{args.cell_lon:g}x{args.cell_lat:g}")
-    if int(str(args.crs).split(":")[1]) == 3857:
-        mid_lat = sum(tiles[0]["lat"]) / 2 if tiles else args.lat_min
-        factor = 1.0 / math.cos(math.radians(mid_lat))
-        print(f"note          EPSG:3857: --scale is in CRS units, not ground metres -- "
-              f"{args.scale:g} units = {args.scale / factor:.1f} m ground at {mid_lat:g}N "
-              f"(30 m ground there needs --scale {30 * factor:.1f})")
+    first = ordered[0]
+    mode = "m ground" if args.scale_mode == "ground" else "CRS units"
+    print(f"pixel size    --scale {args.scale:g} {mode} -> {first['crs_px']:.2f} CRS units "
+          f"= {first['ground_px']:.1f} m ground at {first['mid'][1]:g}N")
+    units = sorted({round(t["crs_px"], 2) for t in tiles})
+    spread = (units[-1] - units[0]) / units[0] if units[0] else 0.0
+    if args.scale_mode == "ground" and spread > 0.01:
+        print(f"note          ground mode: pixel size varies by row ({units[0]:g}..{units[-1]:g} CRS units, "
+              f"{100 * spread:.0f}%), so adjacent rows will not mosaic without resampling "
+              f"-- use --scale-mode crs for a single aligned grid")
+    elif args.scale_mode == "crs" and int(str(args.crs).split(":")[1]) == 3857:
+        print(f"note          EPSG:3857 scale is Mercator metres, not ground metres: ground resolution "
+              f"ranges {min(t['ground_px'] for t in tiles):.1f}..{max(t['ground_px'] for t in tiles):.1f} m "
+              f"over these tiles (use --scale-mode ground for a constant physical resolution)")
     print()
-    print("%-12s %-40s %9s %8s" % ("tile", "name", "Mpx", "est. h"))
-    ordered = sorted(tiles, key=lambda t: (-t["mpx"], t["lon"][0], t["lat"][0]))
+    print("%-16s %-62s %9s %7s %7s %7s" % ("tile", "name", "Mpx", "units", "m", "est. h"))
     for t in ordered:
-        print("%-12s %-40s %9.1f %8.1f" % (
-            t["id"], t["name"], t["mpx"],
+        print("%-16s %-62s %9.1f %7.1f %7.1f %7.1f" % (
+            t["id"], t["name"], t["mpx"], t["crs_px"], t["ground_px"],
             t["mpx"] * 1e6 / (MEASURED_PX_PER_S * 3600)))
     print()
     print(f"{len(tiles)} tiles, {total_mpx:.0f} Mpx total")
@@ -375,6 +436,11 @@ def main(argv=None) -> int:
     ap.add_argument("--end-month", type=int, default=8)
     ap.add_argument("--max-cloud", type=int, default=70)
     ap.add_argument("--scale", type=float, default=30.0)
+    ap.add_argument("--scale-mode", default="ground", choices=("ground", "crs"),
+                    help="ground (default): --scale is metres on the ground, converted per tile via "
+                         "the CRS scale factor, so 30 means 30 m everywhere. crs: --scale is in CRS "
+                         "units, which is what Earth Engine's own 'scale' means (30 in EPSG:3857 = 30 "
+                         "Mercator metres at any latitude, i.e. ~10 m ground at 70N and ~7x the pixels)")
     ap.add_argument("--crs", default="EPSG:3857")
     ap.add_argument("--project", default="pdg-wg-workflow")
     # runner
@@ -410,7 +476,7 @@ def main(argv=None) -> int:
     fp = fingerprint(config)
     tiles = build_tiles(args.lon_min, args.lon_max, args.lat_min, args.lat_max,
                         args.cell_lon, args.cell_lat, args.start_year, args.end_year,
-                        args.crs)
+                        args.crs, args.scale, args.scale_mode)
 
     if args.only:
         wanted = {s.strip() for s in args.only.split(",") if s.strip()}

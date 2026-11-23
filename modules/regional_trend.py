@@ -50,7 +50,7 @@ SLOPE_SCALE_FACTOR = 10  # runTCTrend multiplies by 10; see module docstring
 # deliberately excluded: raising the worker count must never invalidate tiles.
 FINGERPRINT_KEYS = (
     "start_year", "end_year", "start_month", "end_month", "max_cloud",
-    "scale", "crs", "project", "products", "cell_lon", "cell_lat",
+    "scale", "scale_mode", "crs", "project", "products", "cell_lon", "cell_lat",
     "pin_native_grid", "snap",
 )
 
