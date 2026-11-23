@@ -32,6 +32,8 @@ rather than the picture; ``slope_scale_factor=10`` is recorded in the metadata.
 from __future__ import annotations
 
 import math
+import random
+import time
 from pathlib import Path
 
 import ee
@@ -43,6 +45,16 @@ from modules import high_level_functions_CO2 as hlf
 
 SLOPE_BANDS = ("TCB_slope", "TCG_slope", "TCW_slope")
 SLOPE_SCALE_FACTOR = 10  # runTCTrend multiplies by 10; see module docstring
+
+# Keys that define the *product*. Runtime knobs (workers, concurrency) are
+# deliberately excluded: raising the worker count must never invalidate tiles.
+FINGERPRINT_KEYS = (
+    "start_year", "end_year", "start_month", "end_month", "max_cloud",
+    "scale", "crs", "project", "products", "cell_lon", "cell_lat",
+    "pin_native_grid", "snap",
+)
+
+THROTTLE_MARKERS = ("too many requests", "concurrency", "429", "rate limit")
 
 __all__ = ["RegionalTrend", "SLOPE_BANDS", "SLOPE_SCALE_FACTOR"]
 
@@ -67,6 +79,8 @@ class RegionalTrend:
         project: str | None = None,
         pin_native_grid: bool = True,
         snap: bool = False,
+        concurrency: int = 1,
+        fetch_retries: int = 4,
     ):
         self.lon = (float(min(lon)), float(max(lon)))
         self.lat = (float(min(lat)), float(max(lat)))
@@ -79,6 +93,11 @@ class RegionalTrend:
         self.project = project
         self.pin_native_grid = bool(pin_native_grid)
         self.snap = bool(snap)
+        # xee defaults to ThreadPoolExecutor() with min(32, cpu+4) threads, i.e.
+        # up to 32 concurrent computePixels per process -- enough to blow Earth
+        # Engine's concurrent-interactive-request quota from a handful of workers.
+        self.concurrency = max(1, int(concurrency))
+        self.fetch_retries = max(1, int(fetch_retries))
         self._trend: dict | None = None
         self._datasets: dict[str, xr.Dataset] = {}
         self._validate()
@@ -230,16 +249,30 @@ class RegionalTrend:
         )
 
     def _fetch(self, image: ee.Image) -> xr.Dataset:
+        """One request stream, retried with backoff when EE throttles us."""
         grid = self.grid()
-        return xr.open_dataset(
-            image,
-            engine="ee",
-            crs=grid["crs"],
-            crs_transform=grid["crs_transform"],
-            shape_2d=grid["shape_2d"],
-            ee_init_if_necessary=True,
-            ee_init_kwargs={"project": self.project} if self.project else None,
-        ).compute()
+        last: Exception | None = None
+        for attempt in range(self.fetch_retries):
+            try:
+                return xr.open_dataset(
+                    image,
+                    engine="ee",
+                    crs=grid["crs"],
+                    crs_transform=grid["crs_transform"],
+                    shape_2d=grid["shape_2d"],
+                    ee_init_if_necessary=True,
+                    ee_init_kwargs={"project": self.project} if self.project else None,
+                    executor_kwargs={"max_workers": self.concurrency},
+                ).compute()
+            except Exception as exc:                              # noqa: BLE001
+                if not any(m in str(exc).lower() for m in THROTTLE_MARKERS):
+                    raise
+                last = exc
+                wait = min(300, 30 * (2 ** attempt)) + random.uniform(0, 5)
+                print(f"    EE throttled ({attempt + 1}/{self.fetch_retries}), "
+                      f"waiting {wait:.0f}s: {str(exc).splitlines()[0][:120]}", flush=True)
+                time.sleep(wait)
+        raise last if last else RuntimeError("fetch failed")
 
     def dataset(self, kind: str = "visual") -> xr.Dataset:
         """Fetch one of ``visual`` / ``slopes`` / ``observations`` into memory.

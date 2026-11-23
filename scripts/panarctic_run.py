@@ -121,8 +121,18 @@ def make_config(args) -> dict:
 
 
 def fingerprint(config: dict) -> str:
-    blob = json.dumps(config, sort_keys=True).encode()
-    return hashlib.sha256(blob).hexdigest()[:12]
+    """Hash only the product-defining keys.
+
+    The parent hashes ``make_config()`` output while the child re-hashes the
+    config file, which also carries ``out_root``, ``tiles`` and runtime knobs.
+    Hashing everything made those two hashes differ, so `.done.json` markers were
+    written with one hash and compared against another -- i.e. resume never
+    skipped anything and every restart redid the whole queue.
+    """
+    from modules.regional_trend import FINGERPRINT_KEYS
+
+    canonical = {k: config[k] for k in FINGERPRINT_KEYS if k in config}
+    return hashlib.sha256(json.dumps(canonical, sort_keys=True).encode()).hexdigest()[:12]
 
 
 # --------------------------------------------------------------- per tile
@@ -193,6 +203,8 @@ def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
         project=config["project"],
         pin_native_grid=config["pin_native_grid"],
         snap=config["snap"],
+        concurrency=config.get("xee_concurrency", 1),
+        fetch_retries=config.get("fetch_retries", 4),
     )
     grid = run.grid()
     width, height = grid["shape_2d"]
@@ -331,6 +343,11 @@ def main(argv=None) -> int:
     # runner
     ap.add_argument("--out-root", default=DEFAULT_OUT)
     ap.add_argument("--workers", type=int, default=4)
+    ap.add_argument("--xee-concurrency", type=int, default=1,
+                    help="concurrent computePixels per worker (default 1; EE caps concurrent "
+                         "interactive requests, and xee's own default is min(32, cpu+4))")
+    ap.add_argument("--fetch-retries", type=int, default=4,
+                    help="retries per fetch on a throttling error, with exponential backoff")
     ap.add_argument("--limit", type=int, default=0, help="run at most N tiles (rehearsal)")
     ap.add_argument("--only", default="", help="comma-separated tile ids to run, e.g. W160N65,W150N70")
     ap.add_argument("--exclude", default="", help="comma-separated tile ids to skip")
@@ -376,6 +393,8 @@ def main(argv=None) -> int:
     (out_root / "logs").mkdir(exist_ok=True)
     config["out_root"] = str(out_root)
     config["tiles"] = tiles
+    config["xee_concurrency"] = args.xee_concurrency
+    config["fetch_retries"] = args.fetch_retries
     config_file = out_root / "run_config.json"
     config_file.write_text(json.dumps(config, indent=2))
 
@@ -403,7 +422,9 @@ def main(argv=None) -> int:
     print("first up:", ", ".join(t["id"] for t in queue[:min(8, len(queue))]))
     print(f"tile size: {queue[0]['lat'][1] - queue[0]['lat'][0]:g} x "
           f"{queue[0]['lon'][1] - queue[0]['lon'][0]:g} deg "
-          f"({queue[0]['mpx']:.1f} Mpx each)")
+          f"({queue[0]['mpx']:.1f} Mpx each) | "
+          f"xee concurrency {args.xee_concurrency}/worker "
+          f"= {args.workers * args.xee_concurrency} concurrent computePixels")
 
     manifest = out_root / "run_manifest.jsonl"
     running: dict[str, tuple[subprocess.Popen, float, int]] = {}
@@ -482,7 +503,18 @@ def main(argv=None) -> int:
                                 "seconds": elapsed, "at": time.strftime("%Y-%m-%dT%H:%M:%S")})
                         print(f"  FAIL  {tid}: {reason}")
     except KeyboardInterrupt:
-        print("\ninterrupted - running children are left to finish or be killed; re-run to resume")
+        print("\ninterrupted - terminating workers so they stop consuming EE quota ...")
+        for _tid, (proc, _started, _attempts) in running.items():
+            if proc.poll() is None:
+                proc.terminate()
+        deadline = time.time() + 20
+        for tid, (proc, _started, _attempts) in running.items():
+            try:
+                proc.wait(timeout=max(0.1, deadline - time.time()))
+            except subprocess.TimeoutExpired:
+                proc.kill()
+                print(f"  killed {tid}")
+        print("workers stopped; re-run the same command to resume")
 
     wall = time.time() - t0
     print(f"\n{'=' * 60}")
