@@ -75,7 +75,7 @@ class RegionalTrend:
         end_month: int = 8,
         max_cloud: int = 70,
         scale: float = 30,
-        crs: str = "EPSG:3413",
+        crs: str = "EPSG:3857",
         project: str | None = None,
         pin_native_grid: bool = True,
         snap: bool = False,

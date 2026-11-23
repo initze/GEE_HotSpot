@@ -78,22 +78,26 @@ def tile_id(lon0: float, lat0: float, cell_lon: float = 10.0, cell_lat: float = 
 
 
 def tile_name(lon0: float, lat0: float, start: int, end: int,
-              cell_lon: float = 10.0, cell_lat: float = 5.0) -> str:
+              cell_lon: float = 10.0, cell_lat: float = 5.0,
+              crs: str = "EPSG:3857") -> str:
     """Production-style product name, e.g. TCTrend_SR_W170N60_2007-2026_TCVIS.
 
     A grid other than the legacy 10x5 gets a `_g<lon>x<lat>` suffix: `W170N60`
     alone would mean both the 10x5 tile and the 1x1 cell at (-170, 60), and two
     grids writing to one filename is how a product silently gets overwritten.
+    The EPSG code is always part of the name for the same reason: switching
+    --crs would otherwise overwrite a 3413 product with a 3857 one under an
+    identical filename.
     """
     name = "TCTrend_SR_%s_%d-%d_TCVIS" % (
         tile_id(lon0, lat0, cell_lon, cell_lat), start, end)
     if (float(cell_lon), float(cell_lat)) != (10.0, 5.0):
         name += "_g%gx%g" % (float(cell_lon), float(cell_lat))
-    return name
+    return name + "_epsg%d" % int(str(crs).split(":")[1])
 
 
 def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
-                start=2007, end=2026):
+                start=2007, end=2026, crs="EPSG:3857"):
     """All grid tiles whose cell overlaps the requested bounds."""
     lon0 = math.floor(lon_min / cell_lon) * cell_lon
     lat0 = math.floor(lat_min / cell_lat) * cell_lat
@@ -104,7 +108,7 @@ def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
         while lat < lat_max:
             tiles.append({
                 "id": tile_id(lon, lat, cell_lon, cell_lat),
-                "name": tile_name(lon, lat, start, end, cell_lon, cell_lat),
+                "name": tile_name(lon, lat, start, end, cell_lon, cell_lat, crs),
                 "lon": [lon, lon + cell_lon],
                 "lat": [lat, lat + cell_lat],
                 "mpx": tile_area(lat, cell_lat, cell_lon) / 0.0009 / 1e6,
@@ -287,6 +291,12 @@ def list_tiles(args, config, tiles, fp):
     print(f"config hash   {fp}")
     if (args.cell_lon, args.cell_lat) != (10.0, 5.0):
         print(f"note          non-legacy grid -> filenames carry _g{args.cell_lon:g}x{args.cell_lat:g}")
+    if int(str(args.crs).split(":")[1]) == 3857:
+        mid_lat = sum(tiles[0]["lat"]) / 2 if tiles else args.lat_min
+        factor = 1.0 / math.cos(math.radians(mid_lat))
+        print(f"note          EPSG:3857: --scale is in CRS units, not ground metres -- "
+              f"{args.scale:g} units = {args.scale / factor:.1f} m ground at {mid_lat:g}N "
+              f"(30 m ground there needs --scale {30 * factor:.1f})")
     print()
     print("%-12s %-40s %9s %8s" % ("tile", "name", "Mpx", "est. h"))
     ordered = sorted(tiles, key=lambda t: (-t["mpx"], t["lon"][0], t["lat"][0]))
@@ -365,7 +375,7 @@ def main(argv=None) -> int:
     ap.add_argument("--end-month", type=int, default=8)
     ap.add_argument("--max-cloud", type=int, default=70)
     ap.add_argument("--scale", type=float, default=30.0)
-    ap.add_argument("--crs", default="EPSG:3413")
+    ap.add_argument("--crs", default="EPSG:3857")
     ap.add_argument("--project", default="pdg-wg-workflow")
     # runner
     ap.add_argument("--out-root", default=DEFAULT_OUT)
@@ -399,7 +409,8 @@ def main(argv=None) -> int:
     config = make_config(args)
     fp = fingerprint(config)
     tiles = build_tiles(args.lon_min, args.lon_max, args.lat_min, args.lat_max,
-                        args.cell_lon, args.cell_lat, args.start_year, args.end_year)
+                        args.cell_lon, args.cell_lat, args.start_year, args.end_year,
+                        args.crs)
 
     if args.only:
         wanted = {s.strip() for s in args.only.split(",") if s.strip()}
