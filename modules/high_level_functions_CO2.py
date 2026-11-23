@@ -36,9 +36,13 @@ def makeLandsatSeriesSrFiltered(config):
 #    return wrap
 #---------------------------------------------------------------------------------------------------------------------------------
 
-def make_annual_mosaics(collection, startyear, endyear):
+def make_annual_mosaics(collection, startyear, endyear, native_projection=None):
   """
   Creates an ImageCollection of annual median mosaics from the input collection.
+
+  ``native_projection`` pins the reduce onto that grid. Without it EE reduces on
+  the default 1-degree projection, so a 30 m AOI collapses into one cell and the
+  linear fit downstream is constant over the whole area.
   """
   def make_mosaic(year):
       year = ee.Number(year)
@@ -46,15 +50,17 @@ def make_annual_mosaics(collection, startyear, endyear):
 
       size = yearly.size()
 
-      return ee.Algorithms.If(
-          size.gt(0),
-          yearly.reduce(ee.Reducer.median())
-              .addBands(ee.Image.constant(year).rename('Year').toFloat())
-              .set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis())
-              .set('id', ee.String('Landsat Annual Mosaic ').cat(year.format()))
-              .set('name', year.format()),
-          None
-      )
+      def build():
+          mosaic = yearly.reduce(ee.Reducer.median()) \
+              .addBands(ee.Image.constant(year).rename('Year').toFloat()) \
+              .set('system:time_start', ee.Date.fromYMD(year, 7, 1).millis()) \
+              .set('id', ee.String('Landsat Annual Mosaic ').cat(year.format())) \
+              .set('name', year.format())
+          if native_projection is not None:
+              mosaic = mosaic.setDefaultProjection(native_projection)
+          return mosaic
+
+      return ee.Algorithms.If(size.gt(0), build(), None)
 
   years = ee.List.sequence(startyear, endyear - 1)
   mosaics = years.map(make_mosaic)
@@ -99,7 +105,13 @@ def runTCTrend(config_trend):
   
   startyear = config_trend['STARTYEAR']
   endyear = config_trend['ENDYEAR']
-  annual_collection = make_annual_mosaics(masked_collection, startyear, endyear+1)
+  # Optional: pin the reduces to the collection's native grid (30 m UTM here).
+  # Without it the annual medians and the linear fit run on EE's default
+  # 1-degree projection, which makes the trend constant across a small AOI.
+  native_projection = None
+  if config_trend.get('pin_native_grid'):
+    native_projection = ee.Image(masked_collection.first()).select(0).projection()
+  annual_collection = make_annual_mosaics(masked_collection, startyear, endyear+1, native_projection)
 
 
   # 3. Calculate image pixel count
@@ -117,6 +129,8 @@ def runTCTrend(config_trend):
     trend_image = trend_image.addBands(trend).clip(config_trend['geom'])
 
   trend_image = trend_image.multiply(ee.Image.constant(10))
+  if native_projection is not None:
+    trend_image = trend_image.setDefaultProjection(native_projection)
   trend_image = trend_image.set({
     'description': 'TCVIS trend image',
     'start_year': config_trend['STARTYEAR'],

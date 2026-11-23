@@ -95,5 +95,8 @@ Desktop.ini
 # Logs
 *.log
 
+# Local raster output of scripts/regional_sample_cog.py
+out/
+
 # Local configuration files
 *.local

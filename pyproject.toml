@@ -2,25 +2,35 @@
 requires = ["setuptools"]
 build-backend = "setuptools.build_meta"
 
+# Flat repo layout with several top-level dirs (apps/, notebooks/, production/);
+# without an explicit include setuptools refuses the build outright.
+[tool.setuptools.packages.find]
+include = ["geehotspot*", "modules*"]
+exclude = ["apps*", "notebooks*", "production*", "scripts*"]
+
 [project]
 name = "geehotspot"
 version = "0.7.0"
 description = "GEE HotSpot Trend creation package"
 readme = "README.md"
-requires-python = ">=3.11"
+requires-python = ">=3.12"
 authors = [
     { name = "Ingmar Nitze", email = "ingmar.nitze@awi.de" },
     { name = "Sina Pohlabeln"}
 ]
 urls = {Homepage = "https://github.com/initze/GEE_HotSpot"}
 dependencies = [
-    "earthengine-api>=1.5.12",
+    "earthengine-api>=1.7",
     "eemont>=0.3.6",
-    "geemap>=0.35.3",
+    "geemap>=0.39",
     "ipykernel>=6.29.5",
     "ipywidgets>=8.1.6",
     "jupyterlab>=4.4.1",
     "leafmap>=0.43.6",
-    "numpy<2",
+    "matplotlib>=3.9",
+    "numpy>=2",
     "pip>=25.1.1",
+    "rasterio>=1.5",
+    "xee>=0.1.2",
+    "zarr>=3.4",
 ]
