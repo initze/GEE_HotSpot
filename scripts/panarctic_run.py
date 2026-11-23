@@ -51,21 +51,29 @@ PRODUCTS = ("visual", "nobs")
 
 
 # ----------------------------------------------------------------- tile grid
+def _decimals_for(cell: float) -> int:
+    """Just enough decimals to make k*cell values distinct: 1 deg -> 0, 0.1 -> 1, 0.25 -> 2."""
+    if cell >= 1:
+        return 0
+    text = "%g" % cell
+    return min(6, len(text.split(".")[1]) if "." in text else 1)
+
+
 def hemi(value: float, positive: str, negative: str, decimals: int = 0) -> str:
     sign = positive if value >= 0 else negative
     if decimals <= 0:
         return "%s%02d" % (sign, abs(int(round(value))))
-    return "%s%0*.*f" % (sign, 3 + decimals + 1, decimals, abs(value))
+    return "%s%.*f" % (sign, decimals, abs(value))
 
 
 def tile_id(lon0: float, lat0: float, cell_lon: float = 10.0, cell_lat: float = 5.0) -> str:
-    """Production-style corner id, e.g. W170N60.
+    """Production-style corner id, e.g. W170N60 or W150.4N65.0.
 
     Sub-degree grids need decimals: truncating to integers makes every 0.1 deg
     cell from -150.0 to -149.1 collapse to the same id, i.e. two workers writing
     one file.
     """
-    decimals = 0 if min(cell_lon, cell_lat) >= 1 else 3
+    decimals = max(_decimals_for(cell_lon), _decimals_for(cell_lat))
     return "%s%s" % (hemi(lon0, "E", "W", decimals), hemi(lat0, "N", "S", decimals))
 
 
