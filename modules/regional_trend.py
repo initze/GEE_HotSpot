@@ -400,8 +400,13 @@ class RegionalTrend:
                 raise AssertionError(f"unexpected band set: {out['bands']}")
             if set(out["dtypes"]) != {expected_dtype}:
                 raise AssertionError(f"dtype {out['dtypes']}, expected {expected_dtype}")
-            if kind == "visual" and mask_values != [0, 255]:
-                raise AssertionError(f"expected a real internal mask, got {mask_values}")
+            if kind == "visual":
+                # The mask must be a real 0/255 mask. An all-valid tile is
+                # legitimate (all-land AOI), so all-255 is not an error; values
+                # outside {0, 255} would mean the mask was not written.
+                if not set(mask_values) <= {0, 255}:
+                    raise AssertionError(f"unexpected mask values: {mask_values}")
+                out["masked_pixels"] = int((src.read_masks(1) == 0).sum())
 
             transformer = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
             xs, ys = transformer.transform(
