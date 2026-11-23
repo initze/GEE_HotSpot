@@ -51,7 +51,7 @@ SLOPE_SCALE_FACTOR = 10  # runTCTrend multiplies by 10; see module docstring
 FINGERPRINT_KEYS = (
     "start_year", "end_year", "start_month", "end_month", "max_cloud",
     "scale", "scale_mode", "crs", "project", "products", "cell_lon", "cell_lat",
-    "pin_native_grid", "snap",
+    "pin_native_grid", "snap", "alpha_band",
 )
 
 THROTTLE_MARKERS = ("too many requests", "concurrency", "429", "rate limit")
@@ -81,6 +81,7 @@ class RegionalTrend:
         snap: bool = False,
         concurrency: int = 1,
         fetch_retries: int = 4,
+        alpha_band: bool = False,
     ):
         self.lon = (float(min(lon)), float(max(lon)))
         self.lat = (float(min(lat)), float(max(lat)))
@@ -98,6 +99,9 @@ class RegionalTrend:
         # Engine's concurrent-interactive-request quota from a handful of workers.
         self.concurrency = max(1, int(concurrency))
         self.fetch_retries = max(1, int(fetch_retries))
+        # Write the validity mask as a 4th byte band instead of an internal mask,
+        # for consumers that expect RGBA (e.g. an existing 4-band COG mosaic).
+        self.alpha_band = bool(alpha_band)
         self._trend: dict | None = None
         self._datasets: dict[str, xr.Dataset] = {}
         self._validate()
@@ -349,9 +353,13 @@ class RegionalTrend:
 
         stack = np.stack([ds[b].values for b in bands])
         mask = None
+        band_names = list(bands)
         if kind == "visual":
             mask = ~np.isnan(stack).any(axis=0)
             arr = np.where(mask, np.nan_to_num(stack), 0).astype("uint8")
+            if self.alpha_band:
+                arr = np.concatenate([arr, (mask.astype("uint8") * 255)[None, :, :]], axis=0)
+                band_names.append("valid")
             dtype, nodata, predictor = "uint8", None, 2
         elif kind == "observations":
             arr = stack.astype("uint16")
@@ -380,13 +388,13 @@ class RegionalTrend:
         path.parent.mkdir(parents=True, exist_ok=True)
         with rasterio.open(path, "w", **profile) as dst:
             dst.write(arr)
-            for i, name in enumerate(bands, 1):
+            for i, name in enumerate(band_names, 1):
                 dst.set_band_description(i, name)
             merged = dict(ds.attrs)
             if tags:
                 merged.update(tags)
             dst.update_tags(**{k: str(v) for k, v in merged.items()})
-            if mask is not None:
+            if mask is not None and not self.alpha_band:
                 dst.write_mask(mask.astype("uint8") * 255)
         return path
 
@@ -448,7 +456,10 @@ class RegionalTrend:
         expected_dtype = {
             "visual": "uint8", "slopes": "float32", "observations": "uint16"
         }[kind]
-        expected_bands = list(SLOPE_BANDS) if kind in ("visual", "slopes") else ["nObservations"]
+        expected_bands = (
+            list(SLOPE_BANDS) + (["valid"] if (kind == "visual" and self.alpha_band) else [])
+            if kind in ("visual", "slopes") else ["nObservations"]
+        )
         out: dict = {}
         with rasterio.open(cog_path) as src:
             out["crs"] = src.crs.to_string()
@@ -470,12 +481,20 @@ class RegionalTrend:
             if set(out["dtypes"]) != {expected_dtype}:
                 raise AssertionError(f"dtype {out['dtypes']}, expected {expected_dtype}")
             if kind == "visual":
-                # The mask must be a real 0/255 mask. An all-valid tile is
-                # legitimate (all-land AOI), so all-255 is not an error; values
-                # outside {0, 255} would mean the mask was not written.
-                if not set(mask_values) <= {0, 255}:
-                    raise AssertionError(f"unexpected mask values: {mask_values}")
-                out["masked_pixels"] = int((src.read_masks(1) == 0).sum())
+                if self.alpha_band:
+                    alpha = src.read(src.count)
+                    values = sorted(set(np.unique(alpha).tolist()))
+                    if not set(values) <= {0, 255}:
+                        raise AssertionError(f"alpha band has unexpected values: {values}")
+                    out["mask_values"] = values
+                    out["masked_pixels"] = int((alpha == 0).sum())
+                else:
+                    # A real 0/255 mask. An all-valid tile is legitimate
+                    # (all-land AOI), so all-255 is not an error; values outside
+                    # {0, 255} would mean the mask was not written.
+                    if not set(mask_values) <= {0, 255}:
+                        raise AssertionError(f"unexpected mask values: {mask_values}")
+                    out["masked_pixels"] = int((src.read_masks(1) == 0).sum())
 
             transformer = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
             xs, ys = transformer.transform(

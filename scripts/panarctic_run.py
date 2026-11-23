@@ -192,6 +192,7 @@ def make_config(args) -> dict:
         "cell_lat": args.cell_lat,
         "pin_native_grid": True,
         "snap": True,
+        "alpha_band": bool(args.alpha_band),
     }
 
 
@@ -283,6 +284,7 @@ def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
         snap=config["snap"],
         concurrency=config.get("xee_concurrency", 1),
         fetch_retries=config.get("fetch_retries", 4),
+        alpha_band=config.get("alpha_band", False),
     )
     grid = run.grid()
     width, height = grid["shape_2d"]
@@ -442,6 +444,9 @@ def main(argv=None) -> int:
                          "units, which is what Earth Engine's own 'scale' means (30 in EPSG:3857 = 30 "
                          "Mercator metres at any latitude, i.e. ~10 m ground at 70N and ~7x the pixels)")
     ap.add_argument("--crs", default="EPSG:3857")
+    ap.add_argument("--alpha-band", action="store_true",
+                    help="write the validity mask as a 4th byte band (RGBA-style, matching an "
+                         "existing 4-band mosaic) instead of an internal mask")
     ap.add_argument("--project", default="pdg-wg-workflow")
     # runner
     ap.add_argument("--out-root", default=DEFAULT_OUT)
