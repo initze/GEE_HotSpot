@@ -66,6 +66,7 @@ class RegionalTrend:
         crs: str = "EPSG:3413",
         project: str | None = None,
         pin_native_grid: bool = True,
+        snap: bool = False,
     ):
         self.lon = (float(min(lon)), float(max(lon)))
         self.lat = (float(min(lat)), float(max(lat)))
@@ -77,6 +78,7 @@ class RegionalTrend:
         self.crs = crs
         self.project = project
         self.pin_native_grid = bool(pin_native_grid)
+        self.snap = bool(snap)
         self._trend: dict | None = None
         self._datasets: dict[str, xr.Dataset] = {}
         self._validate()
@@ -189,16 +191,42 @@ class RegionalTrend:
 
     # ------------------------------------------------------------------ delivery
     def grid(self) -> dict:
-        """Target grid (crs / affine / shape), derived from the bbox by xee."""
+        """Target grid (crs / affine / shape).
+
+        ``snap=True`` puts the grid origin on a global lattice of ``scale`` in
+        the target CRS, so tiles written by different runs/processes are
+        pixel-aligned and mosaic without resampling. ``snap=False`` keeps the
+        original behaviour (xee fits the bbox independently), which is fine for
+        a one-off sample but leaves neighbours off by up to one pixel.
+        """
         import shapely.geometry
 
-        return dict(
-            xee.fit_geometry(
-                shapely.geometry.box(self.lon[0], self.lat[0], self.lon[1], self.lat[1]),
-                geometry_crs="EPSG:4326",
-                grid_crs=self.crs,
-                grid_scale=(self.scale, -self.scale),  # negative y = north-up
+        if not self.snap:
+            return dict(
+                xee.fit_geometry(
+                    shapely.geometry.box(self.lon[0], self.lat[0], self.lon[1], self.lat[1]),
+                    geometry_crs="EPSG:4326",
+                    grid_crs=self.crs,
+                    grid_scale=(self.scale, -self.scale),  # negative y = north-up
+                )
             )
+
+        from pyproj import Transformer
+
+        transformer = Transformer.from_crs("EPSG:4326", self.crs, always_xy=True)
+        xs, ys = transformer.transform(
+            [self.lon[0], self.lon[1], self.lon[0], self.lon[1]],
+            [self.lat[0], self.lat[0], self.lat[1], self.lat[1]],
+        )
+        res = self.scale
+        x0 = math.floor(min(xs) / res) * res
+        y1 = math.ceil(max(ys) / res) * res
+        width = int(math.ceil((max(xs) - x0) / res))
+        height = int(math.ceil((y1 - min(ys)) / res))
+        return dict(
+            crs=self.crs,
+            crs_transform=(res, 0.0, x0, 0.0, -res, y1),
+            shape_2d=(width, height),
         )
 
     def _fetch(self, image: ee.Image) -> xr.Dataset:
