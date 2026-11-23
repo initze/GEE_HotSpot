@@ -265,6 +265,51 @@ def list_tiles(args, config, tiles, fp):
     print(f"rehearse cheaply with --scale 120 (roughly {hours / 16:.1f} h) before committing to 30 m")
 
 
+def preflight(args) -> int:
+    """Everything a tile needs before an hour of compute is spent discovering it."""
+    import shutil
+
+    ok = True
+
+    def check(label, fn):
+        nonlocal ok
+        try:
+            detail = fn()
+            print(f"  OK    {label}" + (f" -- {detail}" if detail else ""))
+        except Exception as exc:
+            ok = False
+            print(f"  FAIL  {label} -- {exc.__class__.__name__}: {exc}")
+
+    def imports():
+        import ee  # noqa: F401
+        import rasterio
+        import xarray  # noqa: F401
+        import xee  # noqa: F401
+        from modules.regional_trend import RegionalTrend  # noqa: F401
+        return f"rasterio {rasterio.__version__} (GDAL {rasterio.__gdal_version__})"
+
+    def ee_auth():
+        import ee
+        ee.Initialize(project=args.project)
+        return "project %s answers, Number(1) = %s" % (args.project, ee.Number(1).getInfo())
+
+    def outdir():
+        path = Path(args.out_root)
+        path.mkdir(parents=True, exist_ok=True)
+        probe = path / ".write_probe"
+        probe.write_text("ok")
+        probe.unlink()
+        free_gb = shutil.disk_usage(path).free / 1e9
+        return "%s, %.0f GB free" % (path, free_gb)
+
+    print(f"preflight: {args.out_root}")
+    check("imports (ee, xarray, xee, rasterio, modules)", imports)
+    check("Earth Engine auth + compute", ee_auth)
+    check("output directory writable", outdir)
+    print("preflight", "PASSED" if ok else "FAILED")
+    return 0 if ok else 1
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     # region / grid
@@ -292,6 +337,8 @@ def main(argv=None) -> int:
     ap.add_argument("--tile-timeout", type=int, default=0, help="seconds per tile; 0 = no limit")
     ap.add_argument("--retries", type=int, default=2)
     ap.add_argument("--list-tiles", action="store_true", help="show the queue and estimates, touch nothing")
+    ap.add_argument("--preflight", action="store_true",
+                    help="check imports, Earth Engine auth, output dir and free space, then exit")
     ap.add_argument("--force", action="store_true", help="re-run tiles that already look complete")
     # internal
     ap.add_argument("--run-tile", default=None, help=argparse.SUPPRESS)
@@ -300,6 +347,9 @@ def main(argv=None) -> int:
 
     if args.run_tile:
         return child(args, Path(args.config_file), args.run_tile)
+
+    if args.preflight:
+        return preflight(args)
 
     out_root = Path(args.out_root)
     config = make_config(args)
@@ -360,28 +410,47 @@ def main(argv=None) -> int:
     failures: list[tuple[str, str]] = []
     done = 0
     t0 = time.time()
+    logged_tail: set[str] = set()
 
     def record(entry: dict):
         with manifest.open("a") as fh:
             fh.write(json.dumps(entry) + "\n")
+
+    def spawn(tile: dict, append_log: bool = False) -> subprocess.Popen:
+        p = paths_for(out_root, tile["name"])
+        handle = p["log"].open("a" if append_log else "w")
+        cmd = [sys.executable, "-u", str(REPO / "scripts" / "panarctic_run.py"),
+               "--run-tile", tile["id"], "--config-file", str(config_file)]
+        print(f"  start {tile['id']} ({tile['mpx']:.0f} Mpx) -> {p['log'].name}")
+        return subprocess.Popen(cmd, cwd=str(REPO), stdout=handle, stderr=subprocess.STDOUT)
+
+    def show_tail(tile: dict, lines: int = 15):
+        """A failed tile is useless without its traceback in the driver's output."""
+        if tile["id"] in logged_tail:
+            return
+        logged_tail.add(tile["id"])
+        log = paths_for(out_root, tile["name"])["log"]
+        try:
+            body = log.read_text(errors="replace").splitlines()
+        except OSError:
+            return
+        interesting = [ln for ln in body if ln.strip()] or ["(log is empty)"]
+        print(f"  --- last {min(lines, len(interesting))} lines of {log.name} ---")
+        for line in interesting[-lines:]:
+            print(f"  | {line}")
+        print("  ---")
 
     try:
         while queue or running:
             # start jobs up to the worker limit
             while queue and len(running) < args.workers:
                 tile = queue.pop(0)
-                p = paths_for(out_root, tile["name"])
-                log_fh = p["log"].open("w")
-                cmd = [sys.executable, "-u", __file__,
-                       "--run-tile", tile["id"], "--config-file", str(config_file)]
-                proc = subprocess.Popen(cmd, cwd=str(REPO), stdout=log_fh, stderr=subprocess.STDOUT)
-                running[tile["id"]] = (proc, time.time(), 0)
-                print(f"  start {tile['id']} ({tile['mpx']:.0f} Mpx) -> {p['log'].name}")
+                running[tile["id"]] = (spawn(tile), time.time(), 0)
 
             time.sleep(5)
             for tid, (proc, started, attempts) in list(running.items()):
                 finished = proc.poll() is not None
-                timed_out = (args.tile_timeout and time.time() - started > args.tile_timeout)
+                timed_out = bool(args.tile_timeout) and (time.time() - started > args.tile_timeout)
                 if timed_out and not finished:
                     proc.kill()
                     finished = True
@@ -401,14 +470,12 @@ def main(argv=None) -> int:
                     print(f"  done  {tid} in {elapsed / 60:.1f} min ({done} done, {len(queue)} queued)")
                 else:
                     reason = "timeout" if timed_out else why
+                    show_tail(tile)
                     if attempts < args.retries:
-                        print(f"  retry {tid} ({reason})")
-                        queue.insert(0, tile)
-                        running[tid] = (subprocess.Popen(
-                            [sys.executable, "-u", __file__, "--run-tile", tid,
-                             "--config-file", str(config_file)],
-                            cwd=str(REPO),
-                            stdout=p["log"].open("a"), stderr=subprocess.STDOUT), time.time(), attempts + 1)
+                        print(f"  retry {tid} ({reason}, attempt {attempts + 2} of {args.retries + 1})")
+                        # re-register as running; do NOT also re-queue, or the same
+                        # tile gets picked up twice and a hard failure loops forever
+                        running[tid] = (spawn(tile, append_log=True), time.time(), attempts + 1)
                     else:
                         failures.append((tid, reason))
                         record({"tile": tid, "state": "failed", "reason": reason,
