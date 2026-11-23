@@ -430,6 +430,14 @@ def main(argv=None) -> int:
 
     out_root.mkdir(parents=True, exist_ok=True)
     (out_root / "logs").mkdir(exist_ok=True)
+    # A write takes seconds, so anything older than an hour is the corpse of an
+    # interrupted attempt: it will never be renamed, because only the tile being
+    # processed now writes to its own .tmp name.
+    stale = [p for p in out_root.glob("*.tmp.tif") if time.time() - p.stat().st_mtime > 3600]
+    for path in stale:
+        path.unlink(missing_ok=True)
+    if stale:
+        print(f"removed {len(stale)} stale .tmp.tif file(s) left by an interrupted run")
     config["out_root"] = str(out_root)
     config["tiles"] = tiles
     config["xee_concurrency"] = args.xee_concurrency
