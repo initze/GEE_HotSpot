@@ -50,7 +50,7 @@ run = RegionalTrend(
     years=(2007, 2026),                          # Jul-Aug, cloud < 70 %
     project="pdg-wg-workflow",
 )
-run.to_cog("out/TCTrend_2007-2026_visual.tif")   # 3 x uint8, EPSG:3413, 30 m
+run.to_cog("out/TCTrend_2007-2026_visual.tif")   # 3 x uint8, EPSG:3857 (default), 30 m units
 run.to_cog("out/TCTrend_2007-2026_nobs.tif", kind="observations")
 run.to_zarr("out/TCTrend_2007-2026_visual.zarr")
 run.quicklook("out/TCTrend_2007-2026.png")

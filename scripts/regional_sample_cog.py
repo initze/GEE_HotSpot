@@ -37,7 +37,7 @@ def parse_args(argv=None):
     p.add_argument("--end-month", type=int, default=8)
     p.add_argument("--max-cloud", type=int, default=70)
     p.add_argument("--scale", type=float, default=30.0)
-    p.add_argument("--crs", default="EPSG:3413")
+    p.add_argument("--crs", default="EPSG:3857")
     p.add_argument("--project", default="pdg-wg-workflow")
     p.add_argument(
         "--kind", default="visual", choices=("visual", "slopes"),
