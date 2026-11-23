@@ -13,13 +13,20 @@ Basic use::
         lon=(-154.0, -153.5), lat=(70.7, 70.9),
         years=(2007, 2026), project="pdg-wg-workflow",
     )
-    run.to_cog("out/TCTrend_2007-2026.tif")     # slopes, EPSG:3413, 30 m
+    run.to_cog("out/TCTrend_2007-2026.tif")     # 3 x uint8, EPSG:3413, 30 m
     run.to_zarr("out/TCTrend_2007-2026.zarr")   # same grid, xarray-native
-    run.quicklook("out/TCTrend_2007-2026.png", vmin=-1.2, vmax=1.2)
+    run.quicklook("out/TCTrend_2007-2026.png")
 
-Band values are the raw ``runTCTrend`` output, i.e. TC slope * 10 (the factor
-exists only so the published uint8 visual fits in 0..255). It is recorded in the
-file metadata as ``slope_scale_factor=10``.
+Two products are available through the ``kind`` argument:
+
+``visual`` (default) — what ``Production_2005-2024.ipynb`` exports with
+``toByte()``: 3 bands (TCB/TCG/TCW slope), uint8, ``unitScale(-0.12, 0.12)*255``.
+Masked pixels live in an internal mask band, not a nodata sentinel, because all
+of 0..255 are legitimate values of that scale.
+
+``slopes`` — the raw float trend (``runTCTrend``'s ``data``), i.e. TC slope x 10,
+stored as float32 with NaN for masked pixels. Use it when you need the numbers
+rather than the picture; ``slope_scale_factor=10`` is recorded in the metadata.
 """
 
 from __future__ import annotations
@@ -172,6 +179,14 @@ class RegionalTrend:
             "system:time_start", ee.Date.fromYMD(start, self.start_month, 1).millis()
         )
 
+    def visual_image(self) -> ee.Image:
+        """The production product: 3 x uint8, ``unitScale(-0.12, 0.12) * 255``.
+
+        This is what ``Production_2005-2024.ipynb`` exports with ``toByte()``, so
+        it is the default delivery here too.
+        """
+        return self.trend()["visual"].select(list(SLOPE_BANDS))
+
     # ------------------------------------------------------------------ delivery
     def grid(self) -> dict:
         """Target grid (crs / affine / shape), derived from the bbox by xee."""
@@ -198,10 +213,17 @@ class RegionalTrend:
             ee_init_kwargs={"project": self.project} if self.project else None,
         ).compute()
 
-    def dataset(self, kind: str = "slopes") -> xr.Dataset:
-        """Fetch one of ``slopes`` / ``observations`` into memory (cached)."""
+    def dataset(self, kind: str = "visual") -> xr.Dataset:
+        """Fetch one of ``visual`` / ``slopes`` / ``observations`` into memory.
+
+        ``visual`` is the production product (uint8 0..255 on the GeoTIFF, kept
+        here as float with NaN where masked so the mask survives until writing);
+        ``slopes`` is the raw float trend (TC slope x 10).
+        """
         if kind not in self._datasets:
-            if kind == "slopes":
+            if kind == "visual":
+                ds = self._fetch(self.visual_image())
+            elif kind == "slopes":
                 ds = self._fetch(self.slopes_image())
             elif kind == "observations":
                 ds = self._fetch(self.observations_image()).fillna(0).astype("uint16")
@@ -214,6 +236,7 @@ class RegionalTrend:
             start, end = self.years
             ds.attrs.update(
                 source="GEE_HotSpot modules.high_level_functions_CO2.runTCTrend",
+                product=kind,
                 start_year=start,
                 end_year=end,
                 start_month=self.start_month,
@@ -223,8 +246,11 @@ class RegionalTrend:
                 scale=float(self.scale),
                 lon=f"{self.lon[0]},{self.lon[1]}",
                 lat=f"{self.lat[0]},{self.lat[1]}",
-                slope_scale_factor=SLOPE_SCALE_FACTOR,
             )
+            if kind == "slopes":
+                ds.attrs["slope_scale_factor"] = SLOPE_SCALE_FACTOR
+            elif kind == "visual":
+                ds.attrs["unit_scale"] = "-0.12,0.12 -> 0..255"
             self._datasets[kind] = ds
         return self._datasets[kind]
 
@@ -234,8 +260,14 @@ class RegionalTrend:
         y = ds["y"].values
         return ds if y[0] > y[-1] else ds.sortby("y", ascending=False)
 
-    def to_cog(self, path: str | Path, kind: str = "slopes") -> Path:
-        """Write a Cloud-Optimized GeoTIFF in ``self.crs``."""
+    def to_cog(self, path: str | Path, kind: str = "visual") -> Path:
+        """Write a Cloud-Optimized GeoTIFF in ``self.crs``.
+
+        ``visual`` (default) is the production product: 3 x uint8, with masked
+        pixels carried in an **internal mask band** rather than a nodata value —
+        0..255 are all legitimate values of the ±0.12 scale, so a nodata
+        sentinel would destroy the extremes. ``slopes`` writes float32 with NaN.
+        """
         import rasterio
         from rasterio.transform import from_origin
 
@@ -248,23 +280,36 @@ class RegionalTrend:
         transform = from_origin(
             float(x.min() - res_x / 2), float(y.max() + res_y / 2), res_x, res_y
         )
-        arr = np.stack([ds[b].values for b in bands])
-        is_float = np.issubdtype(arr.dtype, np.floating)
+
+        stack = np.stack([ds[b].values for b in bands])
+        mask = None
+        if kind == "visual":
+            mask = ~np.isnan(stack).any(axis=0)
+            arr = np.where(mask, np.nan_to_num(stack), 0).astype("uint8")
+            dtype, nodata, predictor = "uint8", None, 2
+        elif kind == "observations":
+            arr = stack.astype("uint16")
+            dtype, nodata, predictor = "uint16", 0, 2
+        else:
+            arr = stack.astype("float32")
+            dtype, nodata, predictor = "float32", float("nan"), 3
+
         profile = dict(
             driver="COG",
-            dtype=arr.dtype.name,
+            dtype=dtype,
             count=arr.shape[0],
             width=arr.shape[2],
             height=arr.shape[1],
             crs=self.crs,
             transform=transform,
-            nodata=(float("nan") if is_float else 0),
             compress="DEFLATE",
-            predictor=(3 if is_float else 2),
+            predictor=predictor,
             blocksize=512,
             overview_resampling="average",
             BIGTIFF="IF_SAFER",
         )
+        if nodata is not None:
+            profile["nodata"] = nodata
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
         with rasterio.open(path, "w", **profile) as dst:
@@ -272,34 +317,51 @@ class RegionalTrend:
             for i, name in enumerate(bands, 1):
                 dst.set_band_description(i, name)
             dst.update_tags(**{k: str(v) for k, v in ds.attrs.items()})
+            if mask is not None:
+                dst.write_mask(mask.astype("uint8") * 255)
         return path
 
-    def to_zarr(self, path: str | Path, kind: str = "slopes") -> Path:
+    def to_zarr(self, path: str | Path, kind: str = "visual") -> Path:
         """Write the same grid as a Zarr store (handy for quick xarray work).
 
         Zarr v2 with consolidated metadata: no warnings on either side with
-        xarray 2026.9 / zarr 3.4, and readable by older clients too.
+        xarray 2026.9 / zarr 3.4, and readable by older clients too. Zarr has no
+        nodata concept, so ``visual`` is written as uint8 plus a ``valid``
+        variable (255 where the product has data, 0 where it is masked).
         """
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)
-        self.dataset(kind).to_zarr(path, mode="w", consolidated=True, zarr_format=2)
+        ds = self.dataset(kind)
+        if kind == "visual":
+            first = next(iter(ds.data_vars))
+            ds = ds.copy()
+            ds["valid"] = (~ds[first].isnull()).astype("uint8") * 255
+            ds = ds.fillna(0).astype("uint8")
+        ds.to_zarr(path, mode="w", consolidated=True, zarr_format=2)
         return path
 
-    def quicklook(self, path: str | Path, vmin: float = -1.2, vmax: float = 1.2) -> Path:
-        """3-panel PNG of the slope bands (scale is slope*10, hence +-1.2)."""
+    def quicklook(
+        self, path: str | Path, kind: str = "visual", vmin: float | None = None,
+        vmax: float | None = None,
+    ) -> Path:
+        """3-panel PNG of the three slope bands (uint8 product by default)."""
         import matplotlib
 
         matplotlib.use("Agg")
         import matplotlib.pyplot as plt
 
-        ds = self.dataset("slopes")
+        if vmin is None or vmax is None:
+            vmin, vmax = (0, 255) if kind == "visual" else (-1.2, 1.2)
+        label = "uint8 (+-0.12 -> 0..255)" if kind == "visual" else "slope x10"
+
+        ds = self.dataset(kind)
         fig, axes = plt.subplots(1, len(SLOPE_BANDS), figsize=(4 * len(SLOPE_BANDS), 4.2))
         for ax, band in zip(np.atleast_1d(axes), SLOPE_BANDS):
             im = ax.imshow(ds[band].values, vmin=vmin, vmax=vmax, cmap="RdBu_r")
             ax.set_title(band)
             ax.set_xticks([])
             ax.set_yticks([])
-        fig.colorbar(im, ax=list(np.atleast_1d(axes)), shrink=0.8, label="slope x10")
+        fig.colorbar(im, ax=list(np.atleast_1d(axes)), shrink=0.8, label=label)
         start, end = self.years
         fig.suptitle(f"{start}-{end}  {self.lon[0]}..{self.lon[1]}E  {self.lat[0]}..{self.lat[1]}N")
         path = Path(path)
@@ -309,11 +371,15 @@ class RegionalTrend:
         return path
 
     # ---------------------------------------------------------------- verification
-    def verify(self, cog_path: str | Path) -> dict:
+    def verify(self, cog_path: str | Path, kind: str = "visual") -> dict:
         """Structural + geometric checks on a written COG; returns what it found."""
         import rasterio
         from pyproj import Transformer
 
+        expected_dtype = {
+            "visual": "uint8", "slopes": "float32", "observations": "uint16"
+        }[kind]
+        expected_bands = list(SLOPE_BANDS) if kind in ("visual", "slopes") else ["nObservations"]
         out: dict = {}
         with rasterio.open(cog_path) as src:
             out["crs"] = src.crs.to_string()
@@ -325,11 +391,17 @@ class RegionalTrend:
             out["compression"] = src.compression.name if src.compression else None
             bounds = src.bounds
             out["overviews"] = src.overviews(1)
+            mask_values = sorted(set(np.unique(src.read_masks(1)).tolist()))
+            out["mask_values"] = mask_values
 
             if src.crs.to_epsg() != int(self.crs.split(":")[1]):
                 raise AssertionError(f"CRS is {out['crs']}, expected {self.crs}")
-            if out["bands"] != list(SLOPE_BANDS):
+            if out["bands"] != expected_bands:
                 raise AssertionError(f"unexpected band set: {out['bands']}")
+            if set(out["dtypes"]) != {expected_dtype}:
+                raise AssertionError(f"dtype {out['dtypes']}, expected {expected_dtype}")
+            if kind == "visual" and mask_values != [0, 255]:
+                raise AssertionError(f"expected a real internal mask, got {mask_values}")
 
             transformer = Transformer.from_crs("EPSG:4326", src.crs, always_xy=True)
             xs, ys = transformer.transform(
@@ -360,9 +432,9 @@ class RegionalTrend:
                 )
         return out
 
-    def ee_stats(self) -> dict:
+    def ee_stats(self, kind: str = "visual") -> dict:
         """Reference statistics straight from Earth Engine, for the COG comparison."""
-        image = self.slopes_image()
+        image = self.visual_image() if kind == "visual" else self.slopes_image()
         geom = self.aoi
         mm = image.reduceRegion(
             reducer=ee.Reducer.minMax(), geometry=geom, scale=self.scale, maxPixels=1e13

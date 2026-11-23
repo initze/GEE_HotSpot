@@ -39,6 +39,10 @@ def parse_args(argv=None):
     p.add_argument("--scale", type=float, default=30.0)
     p.add_argument("--crs", default="EPSG:3413")
     p.add_argument("--project", default="pdg-wg-workflow")
+    p.add_argument(
+        "--kind", default="visual", choices=("visual", "slopes"),
+        help="visual = production 3-band uint8 (default); slopes = float trend",
+    )
     p.add_argument("--out-dir", default="out", help="output directory (kept out of git)")
     p.add_argument("--no-zarr", action="store_true", help="skip the Zarr store")
     return p.parse_args(argv)
@@ -75,21 +79,23 @@ def main(argv=None) -> int:
     trend = run.trend()
     print("  bands:", trend["data"].bandNames().getInfo())
 
-    print("fetching slopes to xarray ...")
-    ds = run.dataset("slopes")
-    print("  grid:", ds.sizes, "| crs:", ds.attrs.get("crs"), "| bands:", list(ds.data_vars))
+    print(f"fetching {args.kind} to xarray ...")
+    ds = run.dataset(args.kind)
+    print("  grid:", ds.sizes, "| crs:", ds.attrs.get("crs"),
+          "| product:", ds.attrs.get("product"), "| bands:", list(ds.data_vars))
 
-    cog = run.to_cog(out / f"{name}_slope.tif")
+    cog = run.to_cog(out / f"{name}_{args.kind}.tif", kind=args.kind)
     print("wrote:", cog)
     nobs_cog = run.to_cog(out / f"{name}_nobs.tif", kind="observations")
     print("wrote:", nobs_cog)
     if not args.no_zarr:
-        print("wrote:", run.to_zarr(out / f"{name}_slope.zarr"))
-    print("wrote:", run.quicklook(out / f"{name}.png"))
+        print("wrote:", run.to_zarr(out / f"{name}_{args.kind}.zarr", kind=args.kind))
+    print("wrote:", run.quicklook(out / f"{name}.png", kind=args.kind))
 
     print("verifying ...")
-    checks = run.verify(cog)
-    stats = run.ee_stats()
+    checks = run.verify(cog, kind=args.kind)
+    checks["observations"] = run.verify(nobs_cog, kind="observations")
+    stats = run.ee_stats(kind=args.kind)
     checks["ee"] = stats
 
     # compare COG band means with Earth Engine's own reduceRegion
