@@ -321,13 +321,18 @@ class RegionalTrend:
         y = ds["y"].values
         return ds if y[0] > y[-1] else ds.sortby("y", ascending=False)
 
-    def to_cog(self, path: str | Path, kind: str = "visual") -> Path:
+    def to_cog(self, path: str | Path, kind: str = "visual",
+               tags: dict | None = None) -> Path:
         """Write a Cloud-Optimized GeoTIFF in ``self.crs``.
 
         ``visual`` (default) is the production product: 3 x uint8, with masked
         pixels carried in an **internal mask band** rather than a nodata value —
         0..255 are all legitimate values of the ±0.12 scale, so a nodata
         sentinel would destroy the extremes. ``slopes`` writes float32 with NaN.
+
+        ``tags`` are extra dataset-level tags. They must be applied here: a COG
+        cannot be reopened with "r+" to add them afterwards (GDAL raises
+        CPLE_AppDefinedError — updating would break the COG layout).
         """
         import rasterio
         from rasterio.transform import from_origin
@@ -377,7 +382,10 @@ class RegionalTrend:
             dst.write(arr)
             for i, name in enumerate(bands, 1):
                 dst.set_band_description(i, name)
-            dst.update_tags(**{k: str(v) for k, v in ds.attrs.items()})
+            merged = dict(ds.attrs)
+            if tags:
+                merged.update(tags)
+            dst.update_tags(**{k: str(v) for k, v in merged.items()})
             if mask is not None:
                 dst.write_mask(mask.astype("uint8") * 255)
         return path

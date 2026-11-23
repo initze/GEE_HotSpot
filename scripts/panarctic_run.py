@@ -51,13 +51,22 @@ PRODUCTS = ("visual", "nobs")
 
 
 # ----------------------------------------------------------------- tile grid
-def hemi(value: float, positive: str, negative: str) -> str:
-    return "%s%02d" % (positive if value >= 0 else negative, abs(int(value)))
+def hemi(value: float, positive: str, negative: str, decimals: int = 0) -> str:
+    sign = positive if value >= 0 else negative
+    if decimals <= 0:
+        return "%s%02d" % (sign, abs(int(round(value))))
+    return "%s%0*.*f" % (sign, 3 + decimals + 1, decimals, abs(value))
 
 
-def tile_id(lon0: float, lat0: float) -> str:
-    """Production-style corner id, e.g. W170N60."""
-    return "%s%s" % (hemi(lon0, "E", "W"), hemi(lat0, "N", "S"))
+def tile_id(lon0: float, lat0: float, cell_lon: float = 10.0, cell_lat: float = 5.0) -> str:
+    """Production-style corner id, e.g. W170N60.
+
+    Sub-degree grids need decimals: truncating to integers makes every 0.1 deg
+    cell from -150.0 to -149.1 collapse to the same id, i.e. two workers writing
+    one file.
+    """
+    decimals = 0 if min(cell_lon, cell_lat) >= 1 else 3
+    return "%s%s" % (hemi(lon0, "E", "W", decimals), hemi(lat0, "N", "S", decimals))
 
 
 def tile_name(lon0: float, lat0: float, start: int, end: int,
@@ -68,7 +77,8 @@ def tile_name(lon0: float, lat0: float, start: int, end: int,
     alone would mean both the 10x5 tile and the 1x1 cell at (-170, 60), and two
     grids writing to one filename is how a product silently gets overwritten.
     """
-    name = "TCTrend_SR_%s_%d-%d_TCVIS" % (tile_id(lon0, lat0), start, end)
+    name = "TCTrend_SR_%s_%d-%d_TCVIS" % (
+        tile_id(lon0, lat0, cell_lon, cell_lat), start, end)
     if (float(cell_lon), float(cell_lat)) != (10.0, 5.0):
         name += "_g%gx%g" % (float(cell_lon), float(cell_lat))
     return name
@@ -85,7 +95,7 @@ def build_tiles(lon_min, lon_max, lat_min, lat_max, cell_lon=10.0, cell_lat=5.0,
         lat = lat0
         while lat < lat_max:
             tiles.append({
-                "id": tile_id(lon, lat),
+                "id": tile_id(lon, lat, cell_lon, cell_lat),
                 "name": tile_name(lon, lat, start, end, cell_lon, cell_lat),
                 "lon": [lon, lon + cell_lon],
                 "lat": [lat, lat + cell_lat],
@@ -181,8 +191,6 @@ def is_done(p: dict, config: dict, fp: str) -> tuple[bool, str]:
 
 def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
     """The child process: one tile, both COGs, PNG, marker. Raises on failure."""
-    import rasterio
-
     from modules.regional_trend import RegionalTrend
 
     p = paths_for(out_root, tile["name"])
@@ -221,11 +229,10 @@ def run_tile(tile: dict, config: dict, out_root: Path) -> dict:
         tmp = final.with_suffix(".tmp.tif")
         tmp.unlink(missing_ok=True)
         log(f"fetching {kind} ...")
-        run.to_cog(tmp, kind=ee_kind)
+        # tags go in at write time: a COG cannot be reopened "r+" (GDAL refuses
+        # to break the optimised layout), it raises CPLE_AppDefinedError
+        run.to_cog(tmp, kind=ee_kind, tags={"tile": tile["id"], "config_hash": fp})
         log(f"{kind} fetched, COG written")
-        # a COG is only allowed to appear under its final name once complete
-        with rasterio.open(tmp, "r+") as src:
-            src.update_tags(tile=tile["id"], config_hash=fp)
         os.replace(tmp, final)
         written[kind] = final
 
@@ -392,6 +399,18 @@ def main(argv=None) -> int:
     if args.exclude:
         skip = {s.strip() for s in args.exclude.split(",") if s.strip()}
         tiles = [t for t in tiles if t["id"] not in skip]
+
+    # two workers writing one file is unfixable later; catch it before spawning
+    names = [t["name"] for t in tiles]
+    duplicates = sorted({n for n in names if names.count(n) > 1})
+    if duplicates:
+        raise SystemExit(
+            f"duplicate tile names for this grid: {duplicates[:3]}"
+            f"{' ...' if len(duplicates) > 3 else ''} -- cell size is too small for the id "
+            "precision; use a coarser --cell-lon/--cell-lat")
+    if min(args.cell_lon, args.cell_lat) < 1:
+        print(f"note: {args.cell_lon:g} x {args.cell_lat:g} deg cells -- each tile still pays the "
+              "same Earth Engine graph setup, so total wall time grows faster than 1/area")
 
     if args.list_tiles:
         list_tiles(args, config, tiles, fp)
